@@ -55,6 +55,7 @@ let ``a filtered real .sln is a genuinely valid, buildable solution`` () =
 
         psi.ArgumentList.Add("build")
         psi.ArgumentList.Add(outputSlnPath)
+        psi.ArgumentList.Add("-nodeReuse:false")
 
         use proc = Process.Start(psi)
         let stdout = proc.StandardOutput.ReadToEnd()

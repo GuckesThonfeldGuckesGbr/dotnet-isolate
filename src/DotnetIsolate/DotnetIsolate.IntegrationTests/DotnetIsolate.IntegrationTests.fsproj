@@ -17,7 +17,14 @@
         <Compile Include="LinkStrategyTests.fs"/>
         <Compile Include="MaterializeTests.fs"/>
         <Compile Include="SolutionFileTests.fs"/>
+        <Compile Include="PipelineTests.fs"/>
         <Compile Include="Program.fs"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- These tests spawn real dotnet/MSBuild subprocesses; running them concurrently risks
+             contention/deadlocks on shared MSBuild build-server nodes and NuGet locks. -->
+        <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>

@@ -15,6 +15,7 @@
         <Compile Include="SolutionFile.fs"/>
         <Compile Include="MsBuild.fs"/>
         <Compile Include="FileResolution.fs"/>
+        <Compile Include="Pipeline.fs"/>
     </ItemGroup>
 
 </Project>

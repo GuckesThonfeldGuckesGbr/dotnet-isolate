@@ -30,15 +30,19 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    projects to include (FR-1, FR-4).
 
 2. **Resolve each project's files.** For every project in that set, run `dotnet msbuild
-   -getItem:Compile;Content;None;EmbeddedResource` to get the real, MSBuild-evaluated file list.
-   This is what makes FR-4 correct in the face of SDK-style implicit globs,
-   `Directory.Build.props`-injected items, and conditions, without hand-replicating MSBuild's
-   globbing/condition semantics (an alternative that was considered and rejected — see below).
-   Using the `-getItem` CLI surface (available since the .NET 8 SDK) instead of embedding
-   `Microsoft.Build` in-process avoids MSBuildLocator/assembly-loading complexity while still using
-   real evaluation. This step is what PR-1 (sub-1s analysis) depends on most; if it turns out too
-   slow in practice on a cold MSBuild/NuGet cache, the in-process `Microsoft.Build` API is the
-   fallback to revisit.
+   -getItem:Compile;Content;None;EmbeddedResource` to get the real, MSBuild-evaluated file list,
+   and explicitly add the project file itself (`.fsproj`/`.csproj`) — `-getItem` never returns it,
+   since a project file isn't a Compile/Content/None/EmbeddedResource item of itself, but it's
+   obviously required to build the isolated output at all (found the hard way: an early version of
+   this step silently produced an output tree with every source file but no project files, which
+   only surfaced once the end-to-end pipeline test tried to actually build the result). This is
+   what makes FR-4 correct in the face of SDK-style implicit globs, `Directory.Build.props`-injected
+   items, and conditions, without hand-replicating MSBuild's globbing/condition semantics (an
+   alternative that was considered and rejected — see below). Using the `-getItem` CLI surface
+   (available since the .NET 8 SDK) instead of embedding `Microsoft.Build` in-process avoids
+   MSBuildLocator/assembly-loading complexity while still using real evaluation. This step is what
+   PR-1 (sub-1s analysis) depends on most; if it turns out too slow in practice on a cold
+   MSBuild/NuGet cache, the in-process `Microsoft.Build` API is the fallback to revisit.
 
 3. **Locate the solution root, then resolve implicit repo-level files.** If `-s`/`--solution` was
    given, use it directly. Otherwise, walk up from the target project's directory to the first
@@ -56,7 +60,13 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    import further-up parents explicitly.
 
 4. **Compute the mirror root.** The common ancestor of every path collected in steps 1–3 becomes
-   the root that gets mirrored into the output folder (FR-2). Nothing above it is copied.
+   the root that gets mirrored into the output folder (FR-2). Nothing above it is copied. The
+   solution root directory from step 3 (if any) is included as one of the inputs here even when it
+   contains no resolved files of its own - otherwise the mirror root could end up *below* the
+   solution root, and step 7's generated solution file would need to be written outside the output
+   folder to preserve its original relative position. Including it guarantees the mirror root is
+   always at or above the solution root, so the generated solution file always lands inside the
+   output folder as FR-3 requires.
 
 5. **Decide the link strategy.** For each distinct (source root, destination root) pair —
    normally just one, since it's rare for a solution's projects to span drives/volumes — pick one

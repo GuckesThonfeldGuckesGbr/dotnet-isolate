@@ -1,0 +1,71 @@
+module DotnetIsolate.IntegrationTests.PipelineTests
+
+open System.Diagnostics
+open System.IO
+open Xunit
+open DotnetIsolate.Core
+open DotnetIsolate.IntegrationTests.TestFixtures
+
+let private runDotnet (workingDir: string) (args: string list) =
+    let psi =
+        ProcessStartInfo(
+            "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = workingDir
+        )
+
+    args |> List.iter psi.ArgumentList.Add
+    use proc = Process.Start(psi)
+    let stdout = proc.StandardOutput.ReadToEnd()
+    let stderr = proc.StandardError.ReadToEnd()
+    proc.WaitForExit()
+    proc.ExitCode, stdout, stderr
+
+/// End-to-end: A -> B, C; B -> D; C -> D (the diamond fixture shape from REQUIREMENTS.md QP-3),
+/// with a real solution file and a NuGet.config at the root to exercise implicit-file resolution
+/// too. Isolates A, then proves the output is a genuinely valid, buildable solution - not just a
+/// plausible-looking file tree.
+[<Fact>]
+let ``isolate produces a mirrored, buildable output for a diamond dependency graph`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [ "B"; "C" ] []
+        writeProject (Path.Combine(root, "B")) "B" [ "D" ] []
+        writeProject (Path.Combine(root, "C")) "C" [ "D" ] []
+        writeProject (Path.Combine(root, "D")) "D" [] [ "appsettings.json" ]
+
+        File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration/>")
+
+        writeSolution
+            (Path.Combine(root, "Fixture.sln"))
+            [ "A", "A/A.fsproj"; "B", "B/B.fsproj"; "C", "C/C.fsproj"; "D", "D/D.fsproj" ]
+
+        let outputDir = Path.Combine(root, "output")
+
+        let result =
+            Pipeline.isolate
+                { ProjectPath = Path.Combine(root, "A", "A.fsproj")
+                  OutputDir = Some outputDir
+                  SolutionPath = None }
+
+        // Every project's file made it into the mirrored tree.
+        Assert.True(File.Exists(Path.Combine(outputDir, "A", "A.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "B", "B.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "C", "C.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "D", "D.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "D", "appsettings.json")))
+
+        // The implicit repo-level file (FR-5) made it in too.
+        Assert.True(File.Exists(Path.Combine(outputDir, "NuGet.config")))
+
+        // The solution was auto-discovered (FR-8) and a scoped copy generated (FR-3).
+        Assert.True(result.SolutionRoot.IsSome)
+        Assert.Equal(SolutionDiscovery.AutoDiscovered, result.SolutionRoot.Value.Source)
+        let outputSln = Path.Combine(outputDir, "Fixture.sln")
+        Assert.True(File.Exists(outputSln))
+
+        // The generated solution is genuinely valid: restore and build it for real.
+        let exitCode, stdout, stderr =
+            runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false" ]
+        Assert.True((exitCode = 0), $"dotnet build failed (exit {exitCode}):\n{stdout}\n{stderr}"))

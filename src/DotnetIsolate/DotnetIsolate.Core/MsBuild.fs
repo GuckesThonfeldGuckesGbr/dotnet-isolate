@@ -20,6 +20,10 @@ let getItems (projectPath: string) (itemTypes: string list) : Map<string, string
     psi.ArgumentList.Add(projectPath)
     psi.ArgumentList.Add($"""-getItem:{String.concat "," itemTypes}""")
     psi.ArgumentList.Add("-nologo")
+    // Node reuse leaves a persistent MSBuild server process behind; harmless for one call, but
+    // many concurrent/nested calls (as happen across this tool's own test suite) can queue up on
+    // shared nodes and stall. Not worth the reuse speedup here for correctness's sake.
+    psi.ArgumentList.Add("-nodeReuse:false")
 
     use proc = Process.Start(psi)
     let stdout = proc.StandardOutput.ReadToEnd()

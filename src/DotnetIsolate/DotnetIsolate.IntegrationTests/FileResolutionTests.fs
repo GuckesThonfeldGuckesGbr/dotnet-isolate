@@ -6,7 +6,7 @@ open DotnetIsolate.Core
 open DotnetIsolate.IntegrationTests.TestFixtures
 
 [<Fact>]
-let ``resolveFiles picks up Compile and Content items via real MSBuild evaluation`` () =
+let ``resolveFiles picks up Compile and Content items plus the project file via real MSBuild evaluation`` () =
     withTempDir (fun root ->
         writeProject (Path.Combine(root, "A")) "A" [] [ "appsettings.json" ]
 
@@ -15,10 +15,10 @@ let ``resolveFiles picks up Compile and Content items via real MSBuild evaluatio
 
         let fileNames = result |> List.map Path.GetFileName |> Set.ofList
 
-        Assert.Equal<Set<string>>(Set [ "Program.fs"; "appsettings.json" ], fileNames))
+        Assert.Equal<Set<string>>(Set [ "A.fsproj"; "Program.fs"; "appsettings.json" ], fileNames))
 
 [<Fact>]
-let ``resolveAllFiles aggregates real files across a project graph`` () =
+let ``resolveAllFiles aggregates real files, including project files, across a project graph`` () =
     withTempDir (fun root ->
         writeProject (Path.Combine(root, "A")) "A" [ "B" ] []
         writeProject (Path.Combine(root, "B")) "B" [] [ "appsettings.json" ]
@@ -33,6 +33,9 @@ let ``resolveAllFiles aggregates real files across a project graph`` () =
 
         let fileNames = result |> List.map Path.GetFileName |> Set.ofList
 
-        Assert.Equal<Set<string>>(Set [ "Program.fs"; "appsettings.json" ], fileNames)
+        Assert.Equal<Set<string>>(
+            Set [ "A.fsproj"; "B.fsproj"; "Program.fs"; "appsettings.json" ],
+            fileNames
+        )
         // Program.fs exists in both A and B - confirm it wasn't silently collapsed to one entry.
-        Assert.Equal(3, result.Length))
+        Assert.Equal(5, result.Length))

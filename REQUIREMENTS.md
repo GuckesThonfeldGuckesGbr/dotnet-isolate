@@ -16,9 +16,12 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   output root with no arguments, provided the consuming SDK supports that format — see DESIGN.md
   for a caveat specific to `.slnx`. **Status:** `.sln` is implemented and dogfooded against this
   repo's own solution; `.slnx` filtering is not yet implemented.
-- **FR-4** — The tool includes every file an included project's `Compile`, `Content`, `None`, and
-  `EmbeddedResource` MSBuild items resolve to (via real MSBuild evaluation — see DESIGN.md), plus
-  `ProjectReference` targets, recursively.
+- **FR-4** — The tool includes every included project's own project file (`.fsproj`/`.csproj`)
+  plus every file its `Compile`, `Content`, `None`, and `EmbeddedResource` MSBuild items resolve to
+  (via real MSBuild evaluation — see DESIGN.md), plus `ProjectReference` targets, recursively. The
+  project file itself is included explicitly, not via an MSBuild item type — `dotnet msbuild
+  -getItem` never returns it, since a project file isn't a Compile/Content/None/EmbeddedResource
+  item of itself.
 - **FR-5** — The tool walks up from each included project's directory and includes any
   `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `NuGet.config`,
   and `global.json` files it finds along the way, since MSBuild implicitly consumes these during
