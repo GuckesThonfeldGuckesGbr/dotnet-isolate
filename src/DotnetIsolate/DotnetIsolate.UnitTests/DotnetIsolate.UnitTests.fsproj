@@ -14,6 +14,7 @@
         <Compile Include="FileResolutionTests.fs"/>
         <Compile Include="ImplicitFilesTests.fs"/>
         <Compile Include="MirrorRootTests.fs"/>
+        <Compile Include="SolutionFileTests.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
 

@@ -78,6 +78,15 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    occupied (FR-3). This is what lets a bare `dotnet build`/`dotnet restore` at the output root work
    with no extra arguments.
 
+   **Implementation status:** `SolutionFile.filterSln` (in `DotnetIsolate.Core`) implements this for
+   classic `.sln` — parses the `Project(...)`...`EndProject` blocks and the `Global` section against
+   the real structure `dotnet sln add` produces (verified directly, not guessed), filters both by
+   resolved project path, and is dogfooded against this repo's own real `.sln` in the integration
+   suite (the filtered output is written to disk and actually built with `dotnet build`, not just
+   checked as text). `.slnx` (XML) filtering is not yet implemented — same FR-3 contract, but the
+   parsing/rewriting logic is XML-based rather than line-based and hasn't been written. Until it is,
+   isolating a project from a `.slnx` source solution will need this gap closed first.
+
    **`.slnx` SDK caveat:** `.slnx` parsing requires a fairly recent SDK (verified directly: .NET 8
    SDK 8.0.423 fails on it outright with `MSB4068`; .NET 10 SDK 10.0.302 handles it fine). This
    isn't something isolation introduces — a `.slnx`-based source solution already needs an

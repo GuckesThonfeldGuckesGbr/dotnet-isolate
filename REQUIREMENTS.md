@@ -14,7 +14,8 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   source solution — `.sln` or `.slnx`), derived from the source solution as a template but
   containing only the included projects. This lets `dotnet build`/`dotnet restore` run at the
   output root with no arguments, provided the consuming SDK supports that format — see DESIGN.md
-  for a caveat specific to `.slnx`.
+  for a caveat specific to `.slnx`. **Status:** `.sln` is implemented and dogfooded against this
+  repo's own solution; `.slnx` filtering is not yet implemented.
 - **FR-4** — The tool includes every file an included project's `Compile`, `Content`, `None`, and
   `EmbeddedResource` MSBuild items resolve to (via real MSBuild evaluation — see DESIGN.md), plus
   `ProjectReference` targets, recursively.
