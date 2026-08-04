@@ -15,6 +15,7 @@
         <Compile Include="ImplicitFilesTests.fs"/>
         <Compile Include="HardlinkTests.fs"/>
         <Compile Include="LinkStrategyTests.fs"/>
+        <Compile Include="MaterializeTests.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
 
