@@ -3,10 +3,11 @@ module DotnetIsolate.Core.MsBuild
 open System.Diagnostics
 open System.Text.Json
 
-/// Runs `dotnet msbuild -getItem:<itemType>` against `projectPath` and returns the resolved
-/// absolute paths (`FullPath`) of every item of that type - real MSBuild evaluation, so SDK-style
-/// implicit globs, Directory.Build.props-injected items, and conditions all resolve correctly.
-let getItemFullPaths (projectPath: string) (itemType: string) : string list =
+/// Runs `dotnet msbuild -getItem:<types>` against `projectPath` for all of `itemTypes` in a
+/// single process call, and returns each type's resolved absolute paths (`FullPath`) - real
+/// MSBuild evaluation, so SDK-style implicit globs, Directory.Build.props-injected items, and
+/// conditions all resolve correctly. Item types with no matching items are omitted from the map.
+let getItems (projectPath: string) (itemTypes: string list) : Map<string, string list> =
     let psi =
         ProcessStartInfo(
             "dotnet",
@@ -17,7 +18,7 @@ let getItemFullPaths (projectPath: string) (itemType: string) : string list =
 
     psi.ArgumentList.Add("msbuild")
     psi.ArgumentList.Add(projectPath)
-    psi.ArgumentList.Add($"-getItem:{itemType}")
+    psi.ArgumentList.Add($"""-getItem:{String.concat "," itemTypes}""")
     psi.ArgumentList.Add("-nologo")
 
     use proc = Process.Start(psi)
@@ -26,15 +27,26 @@ let getItemFullPaths (projectPath: string) (itemType: string) : string list =
     proc.WaitForExit()
 
     if proc.ExitCode <> 0 then
-        failwith $"dotnet msbuild -getItem:{itemType} failed for {projectPath} (exit {proc.ExitCode}): {stderr}"
+        let types = String.concat "," itemTypes
+        failwith $"dotnet msbuild -getItem:{types} failed for {projectPath} (exit {proc.ExitCode}): {stderr}"
 
     use doc = JsonDocument.Parse(stdout)
-    let mutable items = Unchecked.defaultof<JsonElement>
+    let itemsElement = doc.RootElement.GetProperty("Items")
 
-    if doc.RootElement.GetProperty("Items").TryGetProperty(itemType, &items) then
-        [ for item in items.EnumerateArray() -> item.GetProperty("FullPath").GetString() ]
-    else
-        []
+    itemTypes
+    |> List.choose (fun itemType ->
+        let mutable items = Unchecked.defaultof<JsonElement>
+
+        if itemsElement.TryGetProperty(itemType, &items) then
+            let paths = [ for item in items.EnumerateArray() -> item.GetProperty("FullPath").GetString() ]
+            Some(itemType, paths)
+        else
+            None)
+    |> Map.ofList
+
+/// Runs `dotnet msbuild -getItem:<itemType>` and returns just that type's resolved absolute paths.
+let getItemFullPaths (projectPath: string) (itemType: string) : string list =
+    getItems projectPath [ itemType ] |> Map.tryFind itemType |> Option.defaultValue []
 
 /// A `ProjectGraph.ProjectReferenceResolver` backed by real MSBuild evaluation.
 let projectReferenceResolver: ProjectGraph.ProjectReferenceResolver =
