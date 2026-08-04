@@ -1,0 +1,1 @@
+module DotnetIsolate.Core.Library

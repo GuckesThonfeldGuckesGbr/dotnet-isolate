@@ -11,9 +11,10 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   file, rooted at the common ancestor shared by all included projects and repo-level build files
   (see FR-5). No file paths are rewritten.
 - **FR-3** — The tool generates a new solution file inside the output folder (same format as the
-  source solution, e.g. `.slnx`), derived from the source solution as a template but containing
-  only the included projects. This lets `dotnet build`/`dotnet restore` run at the output root with
-  no arguments.
+  source solution — `.sln` or `.slnx`), derived from the source solution as a template but
+  containing only the included projects. This lets `dotnet build`/`dotnet restore` run at the
+  output root with no arguments, provided the consuming SDK supports that format — see DESIGN.md
+  for a caveat specific to `.slnx`.
 - **FR-4** — The tool includes every file an included project's `Compile`, `Content`, `None`, and
   `EmbeddedResource` MSBuild items resolve to (via real MSBuild evaluation — see DESIGN.md), plus
   `ProjectReference` targets, recursively.

@@ -39,6 +39,10 @@ ScaffoldingReadMe.txt
 # dotenv environment variables file
 .env
 
+# JetBrains Rider
+.idea/
+*.DotSettings.user
+
 # Others
 ~$*
 *~

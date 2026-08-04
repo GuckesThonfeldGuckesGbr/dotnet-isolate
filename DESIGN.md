@@ -61,10 +61,21 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    chosen in step 5.
 
 7. **Generate the scoped solution file.** Parse the source solution as a template, keep only the
-   `<Project Path="...">` entries whose target is in the included-project set from step 1, drop
-   everything else (e.g. a `/Docs/` solution folder, unrelated projects), and write it into the
-   output folder at the mirrored path the original solution file occupied (FR-3). This is what lets
-   a bare `dotnet build`/`dotnet restore` at the output root work with no extra arguments.
+   entries whose target is in the included-project set from step 1, drop everything else (e.g. a
+   `/Docs/` solution folder, unrelated projects), and write it — in the *same format as the source*
+   (`.sln` or `.slnx`) — into the output folder at the mirrored path the original solution file
+   occupied (FR-3). This is what lets a bare `dotnet build`/`dotnet restore` at the output root work
+   with no extra arguments.
+
+   **`.slnx` SDK caveat:** `.slnx` parsing requires a fairly recent SDK (verified directly: .NET 8
+   SDK 8.0.423 fails on it outright with `MSB4068`; .NET 10 SDK 10.0.302 handles it fine). This
+   isn't something isolation introduces — a `.slnx`-based source solution already needs an
+   `.slnx`-capable SDK to build, isolated or not — so the tool preserves the source format rather
+   than silently downgrading it. It does mean: if your source solution is `.slnx`, whatever builds
+   the isolated output (host SDK, or the SDK image tag in a Dockerfile) needs to support it too —
+   e.g. `sdk:10.0` rather than `sdk:8.0` in the patterns under DI-1. This repo's own solution file
+   was briefly `.slnx` during early scaffolding, hit this exact SDK 8 build failure locally, and was
+   reverted to `.sln` — a case of the source solution's format choice, not a tool requirement.
 
 ## Alternatives considered
 
