@@ -59,10 +59,12 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    the root that gets mirrored into the output folder (FR-2). Nothing above it is copied.
 
 5. **Decide the link strategy.** For each distinct (source root, destination root) pair —
-   normally just one, since it's rare for a solution's projects to span drives/volumes — create one
-   scratch file, attempt a real hardlink of it into the destination, and use the result to decide
-   hardlink-or-copy for every file under that pair (REL-2). This is one deliberate upfront check per
-   pair, not a try/catch wrapped around every file copy.
+   normally just one, since it's rare for a solution's projects to span drives/volumes — pick one
+   real file already resolved from that source root, attempt a hardlink of it to a throwaway name
+   under the destination root, and use the result to decide hardlink-or-copy for every file under
+   that pair (REL-2). This is one deliberate upfront check per pair, not a try/catch wrapped around
+   every file copy — and deliberately never writes anything into the source tree (the destination
+   is ours to manage per FR-7; the source is the user's actual solution).
 
 6. **Materialize the output folder.** Delete the output folder if it already exists (FR-7),
    recreate it, then place every resolved file at its mirrored relative path using the strategy
@@ -106,10 +108,13 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
 Given a set of files to place under a destination root:
 
 1. Group files by their resolved source root (usually one group).
-2. For each (source root, destination root) pair not yet decided: create a scratch file under the
-   source root, attempt to hardlink it into the destination root, and record success/failure.
-   Delete the scratch file afterward.
-3. Apply that pair's decision (hardlink or copy) to every real file in the group.
+2. For each (source root, destination root) pair not yet decided: pick one real, already-resolved
+   file from that source root, attempt to hardlink it to a throwaway name under the destination
+   root, and record success/failure. Delete the throwaway file afterward, regardless of outcome.
+   Nothing is ever written into the source tree.
+3. Apply that pair's decision (hardlink or copy) to every real file in the group. If the probe
+   file itself was successfully hardlinked, that's one file already placed correctly — no need to
+   place it again.
 
 This works identically on Windows (NTFS/ReFS support hardlinks the same way Linux/macOS
 filesystems do), rather than branching on OS — the original "hardlink on Linux, copy on Windows"
