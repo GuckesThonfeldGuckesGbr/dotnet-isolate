@@ -6,11 +6,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Program.fs"/>
+        <Compile Include="Program.fs" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="../DotnetIsolate.Core/DotnetIsolate.Core.fsproj"/>
+        <ProjectReference Include="../DotnetIsolate.Core/DotnetIsolate.Core.fsproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Argu" Version="6.2.5" />
     </ItemGroup>
 
 </Project>
