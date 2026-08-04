@@ -9,6 +9,8 @@
         <Compile Include="SolutionDiscovery.fs"/>
         <Compile Include="ImplicitFiles.fs"/>
         <Compile Include="MirrorRoot.fs"/>
+        <Compile Include="Hardlink.fs"/>
+        <Compile Include="LinkStrategy.fs"/>
         <Compile Include="MsBuild.fs"/>
         <Compile Include="FileResolution.fs"/>
     </ItemGroup>

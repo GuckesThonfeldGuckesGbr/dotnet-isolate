@@ -13,6 +13,8 @@
         <Compile Include="ProjectGraphTests.fs"/>
         <Compile Include="FileResolutionTests.fs"/>
         <Compile Include="ImplicitFilesTests.fs"/>
+        <Compile Include="HardlinkTests.fs"/>
+        <Compile Include="LinkStrategyTests.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
 
