@@ -40,12 +40,20 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    slow in practice on a cold MSBuild/NuGet cache, the in-process `Microsoft.Build` API is the
    fallback to revisit.
 
-3. **Resolve implicit repo-level files.** For every project directory found in step 1, walk upward
-   through parent directories collecting `Directory.Build.props`, `Directory.Build.targets`,
-   `Directory.Packages.props`, `NuGet.config`, and `global.json` wherever they occur, up to the
-   solution root (the directory containing the source `.sln`/`.slnx`) or filesystem root, whichever
-   comes first (FR-5). Every occurrence is collected, not just the nearest, since
-   `Directory.Build.props` chains commonly import further-up parents explicitly.
+3. **Locate the solution root, then resolve implicit repo-level files.** If `-s`/`--solution` was
+   given, use it directly. Otherwise, walk up from the target project's directory to the first
+   ancestor directory containing a `.sln`/`.slnx` file — that's the solution root, used here as a
+   walk-up ceiling and again in step 7 as FR-3's template (FR-8). Either way, log which solution
+   file is being used to the console (explicit or auto-discovered), since more than one solution
+   can reference the same project and the choice isn't always obvious. If none is found before the
+   filesystem root (and none was given explicitly), there's no solution to use as a ceiling or a
+   template: skip step 7 entirely and let this step's walk-up run to the filesystem root instead.
+
+   Then, for every project directory found in step 1, walk upward through parent directories
+   collecting `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`,
+   `NuGet.config`, and `global.json` wherever they occur, up to that ceiling (FR-5). Every
+   occurrence is collected, not just the nearest, since `Directory.Build.props` chains commonly
+   import further-up parents explicitly.
 
 4. **Compute the mirror root.** The common ancestor of every path collected in steps 1–3 becomes
    the root that gets mirrored into the output folder (FR-2). Nothing above it is copied.
@@ -60,7 +68,8 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    recreate it, then place every resolved file at its mirrored relative path using the strategy
    chosen in step 5.
 
-7. **Generate the scoped solution file.** Parse the source solution as a template, keep only the
+7. **Generate the scoped solution file** (skipped if step 3 found no solution root, per FR-8).
+   Parse the source solution as a template, keep only the
    entries whose target is in the included-project set from step 1, drop everything else (e.g. a
    `/Docs/` solution folder, unrelated projects), and write it — in the *same format as the source*
    (`.sln` or `.slnx`) — into the output folder at the mirrored path the original solution file

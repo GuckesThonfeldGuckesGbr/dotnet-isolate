@@ -6,6 +6,7 @@
 
     <ItemGroup>
         <Compile Include="ProjectGraph.fs"/>
+        <Compile Include="SolutionDiscovery.fs"/>
         <Compile Include="MsBuild.fs"/>
     </ItemGroup>
 

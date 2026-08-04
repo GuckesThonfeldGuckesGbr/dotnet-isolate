@@ -27,6 +27,15 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   inside the current directory).
 - **FR-7** — If the output folder already exists, the tool deletes it and recreates it from scratch
   before writing, so stale files from a previous run never linger.
+- **FR-8** — By default, the tool locates its "source solution" (used as FR-3's template and
+  FR-5's walk-up ceiling) by walking up from the target project's directory to the first ancestor
+  directory containing a `.sln`/`.slnx` file. Since more than one solution can reference the same
+  project, an optional `-s`/`--solution` argument lets the user specify exactly which solution
+  file to use, overriding auto-discovery. Whichever solution file ends up being used — explicit or
+  auto-discovered — is logged to the console, so the user can see which one was picked. If no
+  solution file is found (and none was explicitly given) before the filesystem root, FR-3's
+  solution generation is skipped and FR-5's walk-up runs all the way to the filesystem root
+  instead.
 
 ## Performance
 

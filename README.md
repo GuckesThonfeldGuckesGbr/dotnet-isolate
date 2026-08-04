@@ -10,6 +10,11 @@ of the original solution tree — the project, its transitive project references
 of those needs to build. The output location can be changed with `-o`/`--output-dir`, which accepts
 any relative or absolute path.
 
+By default, the tool auto-discovers which solution the project belongs to by walking up from the
+project's directory to the nearest `.sln`/`.slnx`, and prints which one it picked. If the project
+is referenced by more than one solution, point at the one you want explicitly with
+`-s`/`--solution`.
+
 ## How will this help me keep my docker image small?
 
 There are two supported ways to wire this into a Dockerfile. Both work with **any** Docker builder,

@@ -43,6 +43,9 @@ ScaffoldingReadMe.txt
 .idea/
 *.DotSettings.user
 
+# macOS
+.DS_Store
+
 # Others
 ~$*
 *~
