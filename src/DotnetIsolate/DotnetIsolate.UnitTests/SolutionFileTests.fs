@@ -1,7 +1,14 @@
 module DotnetIsolate.UnitTests.SolutionFileTests
 
+open System.IO
 open Xunit
 open DotnetIsolate.Core.SolutionFile
+
+// Computed the same way filterSln itself resolves a declared path (Path.Combine + GetFullPath
+// against solutionDir "/repo"), rather than a hardcoded absolute-path literal - a literal
+// "/repo/A/A.fsproj" never matches filterSln's own resolution on Windows, where GetFullPath
+// resolves "/repo" onto the current drive (e.g. "D:\repo\A\A.fsproj").
+let private includedA = Path.GetFullPath(Path.Combine("/repo", "A", "A.fsproj"))
 
 let private sampleSln =
     "\r\n\
@@ -25,27 +32,27 @@ EndGlobal\r\n"
 
 [<Fact>]
 let ``keeps only project entries whose resolved path is included`` () =
-    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) sampleSln
+    let result = filterSln "/repo" (Set [ includedA ]) sampleSln
 
     Assert.Contains("\"A\", \"A\\A.fsproj\"", result)
     Assert.DoesNotContain("\"B\", \"B\\B.fsproj\"", result)
 
 [<Fact>]
 let ``drops ProjectConfigurationPlatforms lines for excluded projects`` () =
-    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) sampleSln
+    let result = filterSln "/repo" (Set [ includedA ]) sampleSln
 
     Assert.Contains("{AAAAAAAA-0000-0000-0000-000000000001}.Debug|Any CPU.ActiveCfg", result)
     Assert.DoesNotContain("{BBBBBBBB-0000-0000-0000-000000000002}", result)
 
 [<Fact>]
 let ``keeps non-GUID-specific global sections verbatim`` () =
-    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) sampleSln
+    let result = filterSln "/repo" (Set [ includedA ]) sampleSln
 
     Assert.Contains("Debug|Any CPU = Debug|Any CPU", result)
 
 [<Fact>]
 let ``preserves the header lines before the first project`` () =
-    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) sampleSln
+    let result = filterSln "/repo" (Set [ includedA ]) sampleSln
 
     Assert.Contains("Microsoft Visual Studio Solution File, Format Version 12.00", result)
     Assert.Contains("MinimumVisualStudioVersion = 10.0.40219.1", result)
@@ -58,7 +65,7 @@ let ``a solution folder entry is dropped since its declared path never matches a
             "EndProject\r\nProject(\"{2150E333-8FDC-42A3-9474-1A3956D46DE8}\") = \"Docs\", \"Docs\", \"{CCCCCCCC-0000-0000-0000-000000000003}\"\r\nEndProject\r\nGlobal\r\n"
         )
 
-    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) slnWithFolder
+    let result = filterSln "/repo" (Set [ includedA ]) slnWithFolder
 
     Assert.DoesNotContain("Docs", result)
 
@@ -70,7 +77,7 @@ let ``NestedProjects lines are dropped entirely, since solution folders are neve
             "\tEndGlobalSection\r\n\tGlobalSection(NestedProjects) = preSolution\r\n\t\t{AAAAAAAA-0000-0000-0000-000000000001} = {CCCCCCCC-0000-0000-0000-000000000003}\r\n\tEndGlobalSection\r\nEndGlobal\r\n"
         )
 
-    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) slnWithNesting
+    let result = filterSln "/repo" (Set [ includedA ]) slnWithNesting
 
     Assert.DoesNotContain("{AAAAAAAA-0000-0000-0000-000000000001} = {CCCCCCCC-0000-0000-0000-000000000003}", result)
     // The section wrapper itself is harmless to leave in (as an empty section) - only its
@@ -84,6 +91,6 @@ let ``a solution file with no Global section at all is handled without crashing`
 Project(\"{F2A71F9B-5D33-465A-A702-920D77279786}\") = \"A\", \"A\\A.fsproj\", \"{AAAAAAAA-0000-0000-0000-000000000001}\"\r\n\
 EndProject\r\n"
 
-    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) noGlobalSection
+    let result = filterSln "/repo" (Set [ includedA ]) noGlobalSection
 
     Assert.Contains("\"A\", \"A\\A.fsproj\"", result)

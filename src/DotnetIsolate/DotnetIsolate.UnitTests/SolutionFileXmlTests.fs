@@ -1,7 +1,13 @@
 module DotnetIsolate.UnitTests.SolutionFileXmlTests
 
+open System.IO
 open Xunit
 open DotnetIsolate.Core.SolutionFileXml
+
+// Computed the same way filterSlnx itself resolves a declared Path attribute (Path.Combine +
+// GetFullPath against solutionDir "/repo"), rather than a hardcoded absolute-path literal - see
+// SolutionFileTests.fs's `includedA` for why a literal doesn't match on Windows.
+let private includedA = Path.GetFullPath(Path.Combine("/repo", "A", "A.fsproj"))
 
 let private sampleSlnx =
     "<Solution>\n\
@@ -11,7 +17,7 @@ let private sampleSlnx =
 
 [<Fact>]
 let ``keeps only project entries whose resolved path is included`` () =
-    let result = filterSlnx "/repo" (Set [ "/repo/A/A.fsproj" ]) sampleSlnx
+    let result = filterSlnx "/repo" (Set [ includedA ]) sampleSlnx
 
     Assert.Contains("A/A.fsproj", result)
     Assert.DoesNotContain("B/B.fsproj", result)
@@ -25,7 +31,7 @@ let ``a folder left with no included projects is dropped entirely`` () =
   </Folder>\n\
 </Solution>"
 
-    let result = filterSlnx "/repo" (Set [ "/repo/A/A.fsproj" ]) slnxWithFolder
+    let result = filterSlnx "/repo" (Set [ includedA ]) slnxWithFolder
 
     Assert.DoesNotContain("Docs", result)
     Assert.DoesNotContain("B/B.fsproj", result)
@@ -40,7 +46,7 @@ let ``a folder retaining at least one included project is kept, and its excluded
   </Folder>\n\
 </Solution>"
 
-    let result = filterSlnx "/repo" (Set [ "/repo/A/A.fsproj" ]) slnxWithFolder
+    let result = filterSlnx "/repo" (Set [ includedA ]) slnxWithFolder
 
     Assert.Contains("Src", result)
     Assert.Contains("A/A.fsproj", result)
@@ -54,7 +60,7 @@ let ``backslash-separated declared paths resolve the same as forward-slash ones`
   <Project Path=\"B\\B.fsproj\" />\n\
 </Solution>"
 
-    let result = filterSlnx "/repo" (Set [ "/repo/A/A.fsproj" ]) slnxWithBackslash
+    let result = filterSlnx "/repo" (Set [ includedA ]) slnxWithBackslash
 
     Assert.Contains("A\\A.fsproj", result)
     Assert.DoesNotContain("B\\B.fsproj", result)
