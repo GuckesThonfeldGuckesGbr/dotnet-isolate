@@ -69,3 +69,29 @@ let ``isolate produces a mirrored, buildable output for a diamond dependency gra
         let exitCode, stdout, stderr =
             runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false" ]
         Assert.True((exitCode = 0), $"dotnet build failed (exit {exitCode}):\n{stdout}\n{stderr}"))
+
+/// FR-8: an explicit -s/--solution path always wins over auto-discovery, even when a different
+/// solution would otherwise be found by walking up from the project.
+[<Fact>]
+let ``isolate uses an explicitly-provided solution path instead of auto-discovering one`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+
+        // The auto-discoverable solution - must NOT be the one that ends up used.
+        writeSolution (Path.Combine(root, "Nearest.sln")) [ "A", "A/A.fsproj" ]
+
+        // The explicitly-requested solution, elsewhere entirely.
+        let explicitSlnDir = Path.Combine(root, "elsewhere")
+        Directory.CreateDirectory(explicitSlnDir) |> ignore
+        let explicitSln = Path.Combine(explicitSlnDir, "Explicit.sln")
+        writeSolution explicitSln [ "A", Path.Combine(root, "A", "A.fsproj") ]
+
+        let result =
+            Pipeline.isolate
+                { ProjectPath = Path.Combine(root, "A", "A.fsproj")
+                  OutputDir = Some(Path.Combine(root, "output"))
+                  SolutionPath = Some explicitSln }
+
+        Assert.True(result.SolutionRoot.IsSome)
+        Assert.Equal(SolutionDiscovery.ExplicitlyProvided, result.SolutionRoot.Value.Source)
+        Assert.Equal(explicitSln, result.SolutionRoot.Value.SolutionFile))

@@ -13,7 +13,7 @@ let ``finds real Directory.Build.props and NuGet.config walking up to the soluti
         File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration/>")
         File.WriteAllText(Path.Combine(root, "src", "Directory.Build.props"), "<Project/>")
 
-        let result = ImplicitFiles.resolve ImplicitFiles.filesOnDisk (Some root) projectDir
+        let result = ImplicitFiles.resolve ImplicitFilesIo.filesOnDisk (Some root) projectDir
 
         let fileNames = result |> List.map Path.GetFileName |> Set.ofList
         Assert.Equal<Set<string>>(Set [ "Directory.Build.props"; "NuGet.config" ], fileNames))

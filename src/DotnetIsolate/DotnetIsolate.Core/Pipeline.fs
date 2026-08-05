@@ -29,16 +29,19 @@ let isolate (options: IsolateOptions) : IsolateResult =
 
     // Step 2: each project's build-relevant files.
     let projectFiles =
-        FileResolution.resolveAllFiles FileResolution.projectItemsResolver projects
+        FileResolution.resolveAllFiles FileResolutionIo.projectItemsResolver projects
 
     // Step 3: locate the solution, then resolve implicit repo-level files up to it.
     let solutionRoot =
-        SolutionDiscovery.resolveSolutionRoot SolutionDiscovery.solutionFilesOnDisk options.SolutionPath projectDir
+        SolutionDiscovery.resolveSolutionRoot
+            SolutionDiscoveryIo.solutionFilesOnDisk
+            options.SolutionPath
+            projectDir
 
     let ceiling = solutionRoot |> Option.map (fun r -> r.Directory)
 
     let implicitFiles =
-        ImplicitFiles.resolveForProjects ImplicitFiles.filesOnDisk ceiling projectDirs
+        ImplicitFiles.resolveForProjects ImplicitFilesIo.filesOnDisk ceiling projectDirs
 
     let allFiles = (projectFiles @ implicitFiles) |> List.distinct
 

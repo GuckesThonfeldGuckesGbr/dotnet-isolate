@@ -11,7 +11,7 @@ let ``resolveFiles picks up Compile and Content items plus the project file via 
         writeProject (Path.Combine(root, "A")) "A" [] [ "appsettings.json" ]
 
         let projectPath = Path.Combine(root, "A", "A.fsproj")
-        let result = FileResolution.resolveFiles FileResolution.projectItemsResolver projectPath
+        let result = FileResolution.resolveFiles FileResolutionIo.projectItemsResolver projectPath
 
         let fileNames = result |> List.map Path.GetFileName |> Set.ofList
 
@@ -29,7 +29,7 @@ let ``resolveAllFiles aggregates real files, including project files, across a p
             ProjectGraph.resolve MsBuild.projectReferenceResolver entryProject
 
         let result =
-            FileResolution.resolveAllFiles FileResolution.projectItemsResolver projects
+            FileResolution.resolveAllFiles FileResolutionIo.projectItemsResolver projects
 
         let fileNames = result |> List.map Path.GetFileName |> Set.ofList
 

@@ -51,12 +51,3 @@ let resolveSolutionRoot
             { Directory = dir
               SolutionFile = file
               Source = AutoDiscovered })
-
-/// A `SolutionFilesInDirectory` backed by the real filesystem.
-let solutionFilesOnDisk: SolutionFilesInDirectory =
-    fun directory ->
-        if Directory.Exists(directory) then
-            (Directory.GetFiles(directory, "*.sln") |> Array.toList)
-            @ (Directory.GetFiles(directory, "*.slnx") |> Array.toList)
-        else
-            []

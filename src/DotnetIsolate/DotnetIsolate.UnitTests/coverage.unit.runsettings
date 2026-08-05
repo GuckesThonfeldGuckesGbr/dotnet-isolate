@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <!-- QP-5: unit coverage is scoped to pure logic only. IO-touching code (MSBuild process
+       invocation, P/Invoke hardlinks, filesystem mutation, pipeline orchestration, and the real
+       filesystem-backed resolvers split into *Io.fs files specifically so this filter can target
+       them by class name) is exercised by the integration suite instead - see
+       DotnetIsolate.IntegrationTests/coverage.integration.runsettings, which measures the same
+       assembly WITHOUT this exclusion. This is a per-invocation filter, not
+       [<ExcludeFromCodeCoverage>], deliberately: that attribute would exclude this code from
+       every coverage run against the assembly, including the integration one it's meant to
+       validate - verified directly before choosing this approach instead. -->
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Exclude>[DotnetIsolate.Core]DotnetIsolate.Core.MsBuild,[DotnetIsolate.Core]DotnetIsolate.Core.Hardlink,[DotnetIsolate.Core]DotnetIsolate.Core.Materialize,[DotnetIsolate.Core]DotnetIsolate.Core.Pipeline,[DotnetIsolate.Core]DotnetIsolate.Core.LinkStrategy,[DotnetIsolate.Core]DotnetIsolate.Core.FileResolutionIo,[DotnetIsolate.Core]DotnetIsolate.Core.ImplicitFilesIo,[DotnetIsolate.Core]DotnetIsolate.Core.SolutionDiscoveryIo,[DotnetIsolate.Core]*StartupCode*</Exclude>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

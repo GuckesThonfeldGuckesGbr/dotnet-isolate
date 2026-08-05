@@ -7,7 +7,9 @@
     <ItemGroup>
         <Compile Include="ProjectGraph.fs"/>
         <Compile Include="SolutionDiscovery.fs"/>
+        <Compile Include="SolutionDiscoveryIo.fs"/>
         <Compile Include="ImplicitFiles.fs"/>
+        <Compile Include="ImplicitFilesIo.fs"/>
         <Compile Include="MirrorRoot.fs"/>
         <Compile Include="Hardlink.fs"/>
         <Compile Include="LinkStrategy.fs"/>
@@ -15,6 +17,7 @@
         <Compile Include="SolutionFile.fs"/>
         <Compile Include="MsBuild.fs"/>
         <Compile Include="FileResolution.fs"/>
+        <Compile Include="FileResolutionIo.fs"/>
         <Compile Include="Pipeline.fs"/>
     </ItemGroup>
 

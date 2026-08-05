@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <!-- QP-4: integration coverage measures the whole DotnetIsolate.Core assembly, including the
+       IO-touching code the unit gate excludes (see
+       DotnetIsolate.UnitTests/coverage.unit.runsettings) - that code is exactly what this suite
+       is meant to validate. Only F#'s compiler-generated module-init noise is excluded, since
+       it's not real code coverlet can meaningfully attribute to a test. -->
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Exclude>[DotnetIsolate.Core]*StartupCode*</Exclude>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

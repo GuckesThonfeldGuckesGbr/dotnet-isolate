@@ -88,11 +88,17 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   `LogicA` + `LogicCommon` and `ServiceB` depends on `LogicB` + `LogicCommon`. Because this input
   space is small and fully known, the integration suite is expected to cover the tool's complete
   logic.
-- **QP-4** — Integration test coverage must be ≥ 90%. This is what gates publishing an alpha
-  package to nuget.org on a green commit to the default branch.
+- **QP-4** — Integration test coverage must be ≥ 90%, measured against the *entire*
+  `DotnetIsolate.Core` assembly (`DotnetIsolate.IntegrationTests/coverage.integration.runsettings`).
+  This is what gates publishing an alpha package to nuget.org on a green commit to the default
+  branch.
 - **QP-5** — Unit test coverage must be ≥ 95%, enforced as a build-breaking CI check — consistent
   with a TDD workflow where nearly all logic is covered by unit tests before the integration suite
-  exercises it end-to-end.
+  exercises it end-to-end. Measured with IO-touching code excluded
+  (`DotnetIsolate.UnitTests/coverage.unit.runsettings`) — see DESIGN.md for why measuring the
+  whole assembly here would make 95% structurally unreachable, and why that exclusion is a
+  per-invocation coverlet filter rather than `[<ExcludeFromCodeCoverage>]` (which would also
+  blind QP-4 to the same code, verified directly).
 - **QP-6** — Unit and integration coverage are tracked and reported separately, not merged into a
   single number.
 - **QP-7** — Every commit merged to the default branch that passes CI (including QP-4/QP-5) is

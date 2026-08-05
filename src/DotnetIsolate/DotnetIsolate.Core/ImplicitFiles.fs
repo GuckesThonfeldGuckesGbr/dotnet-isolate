@@ -2,15 +2,6 @@ module DotnetIsolate.Core.ImplicitFiles
 
 open System.IO
 
-/// The well-known repo-level files MSBuild implicitly consumes from parent directories,
-/// even though a project never references them explicitly (FR-5).
-let wellKnownFileNames =
-    [ "Directory.Build.props"
-      "Directory.Build.targets"
-      "Directory.Packages.props"
-      "NuGet.config"
-      "global.json" ]
-
 /// Returns which well-known files exist directly inside `directory`.
 type FilesInDirectory = string -> string list
 
@@ -35,10 +26,3 @@ let resolve (filesIn: FilesInDirectory) (ceiling: string option) (startDir: stri
 /// Resolves and deduplicates well-known files across every directory in `projectDirs`.
 let resolveForProjects (filesIn: FilesInDirectory) (ceiling: string option) (projectDirs: string list) : string list =
     projectDirs |> List.collect (resolve filesIn ceiling) |> List.distinct
-
-/// A `FilesInDirectory` backed by the real filesystem.
-let filesOnDisk: FilesInDirectory =
-    fun directory ->
-        wellKnownFileNames
-        |> List.map (fun name -> Path.Combine(directory, name))
-        |> List.filter File.Exists

@@ -61,3 +61,29 @@ let ``a solution folder entry is dropped since its declared path never matches a
     let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) slnWithFolder
 
     Assert.DoesNotContain("Docs", result)
+
+[<Fact>]
+let ``NestedProjects lines are dropped entirely, since solution folders are never kept`` () =
+    let slnWithNesting =
+        sampleSln.Replace(
+            "\tEndGlobalSection\r\nEndGlobal\r\n",
+            "\tEndGlobalSection\r\n\tGlobalSection(NestedProjects) = preSolution\r\n\t\t{AAAAAAAA-0000-0000-0000-000000000001} = {CCCCCCCC-0000-0000-0000-000000000003}\r\n\tEndGlobalSection\r\nEndGlobal\r\n"
+        )
+
+    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) slnWithNesting
+
+    Assert.DoesNotContain("{AAAAAAAA-0000-0000-0000-000000000001} = {CCCCCCCC-0000-0000-0000-000000000003}", result)
+    // The section wrapper itself is harmless to leave in (as an empty section) - only its
+    // GUID-mapping content is dropped.
+    Assert.Contains("GlobalSection(NestedProjects)", result)
+
+[<Fact>]
+let ``a solution file with no Global section at all is handled without crashing`` () =
+    let noGlobalSection =
+        "Microsoft Visual Studio Solution File, Format Version 12.00\r\n\
+Project(\"{F2A71F9B-5D33-465A-A702-920D77279786}\") = \"A\", \"A\\A.fsproj\", \"{AAAAAAAA-0000-0000-0000-000000000001}\"\r\n\
+EndProject\r\n"
+
+    let result = filterSln "/repo" (Set [ "/repo/A/A.fsproj" ]) noGlobalSection
+
+    Assert.Contains("\"A\", \"A\\A.fsproj\"", result)
