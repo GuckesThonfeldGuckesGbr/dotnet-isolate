@@ -81,6 +81,27 @@ jobs:
           "coverage/unit/**/coverage.cobertura.xml" 95
           "coverage/integration/**/coverage.cobertura.xml" 90
 
+  # QP-12: drives real `docker build` runs against both DI-1 patterns, twice back to back with an
+  # unrelated file changed in between, asserting the expensive layers cache-hit on the second run
+  # under both the classic builder and BuildKit. Excluded from the QP-4/QP-5 coverage *percentage*
+  # gates (per QP-12's own text), but still required to pass before publish - it's the only thing
+  # that actually exercises the DI-1 Docker patterns end to end. ubuntu-latest runners have Docker
+  # preinstalled; builder flavor is toggled per-build (DOCKER_BUILDKIT env var per subprocess), not
+  # at the job level, so both run in the same job.
+  e2e:
+    name: docker e2e (QP-12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - run: dotnet build -c Release
+
+      - run: dotnet test DotnetIsolate.E2ETests/DotnetIsolate.E2ETests.fsproj -c Release --no-build
+
   # QP-7/QP-11: every green commit to main publishes a prerelease package; a tag matching
   # v<major>.<minor> publishes a clean stable release instead. Uses NuGet Trusted Publishing
   # (OIDC token exchange, no stored API key) - policy already configured on nuget.org for
@@ -88,7 +109,7 @@ jobs:
   # `environment: main` below must match that policy exactly, or the OIDC token exchange fails.
   publish:
     name: publish to nuget.org
-    needs: [test, coverage]
+    needs: [test, coverage, e2e]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: main
