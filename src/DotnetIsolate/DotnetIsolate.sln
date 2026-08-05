@@ -23,6 +23,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{F343F34E-0
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "DotnetIsolate.E2ETests", "DotnetIsolate.E2ETests\DotnetIsolate.E2ETests.fsproj", "{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "DotnetIsolate.PerformanceTests", "DotnetIsolate.PerformanceTests\DotnetIsolate.PerformanceTests.fsproj", "{65AFBF3E-80EA-4E13-BEB0-6E9CD5FC3893}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,5 +54,9 @@ Global
 		{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{65AFBF3E-80EA-4E13-BEB0-6E9CD5FC3893}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{65AFBF3E-80EA-4E13-BEB0-6E9CD5FC3893}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{65AFBF3E-80EA-4E13-BEB0-6E9CD5FC3893}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{65AFBF3E-80EA-4E13-BEB0-6E9CD5FC3893}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -39,6 +39,12 @@ nuget.org, and no `v0.1` tag has been pushed.
   - `DotnetIsolate.E2ETests/` — drives real `docker build` runs against both Dockerfile patterns
     from README.md's Docker integration section, asserting cache-hit behavior (QP-12). Requires a
     Docker daemon; not part of the coverage gates.
+  - `DotnetIsolate.PerformanceTests/` — clones a pinned commit of the real, actively-maintained
+    OrchardCMS/OrchardCore solution (241 projects) and isolates one of its projects, reporting
+    wall-clock time and graph size with no hard pass/fail threshold (machine speed varies too much
+    for a reliable gate). Not part of the coverage gates and not wired into CI; run manually with
+    `dotnet test DotnetIsolate.PerformanceTests` when checking for a perf regression. Needs network
+    access (clones from GitHub) and a .NET 10 SDK (OrchardCore targets net10.0).
   - `global.json` — pins the SDK to `8.0.0` with `rollForward: latestMinor`.
 - `src/TestSolutions/` — two real, git-tracked 5-project fixture solutions (`ServiceA`/`ServiceB`/
   `LogicA`/`LogicB`/`LogicCommon`) used by the integration and E2E suites:
