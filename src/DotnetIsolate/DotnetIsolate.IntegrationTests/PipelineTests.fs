@@ -1,27 +1,9 @@
 module DotnetIsolate.IntegrationTests.PipelineTests
 
-open System.Diagnostics
 open System.IO
 open Xunit
 open DotnetIsolate.Core
 open DotnetIsolate.IntegrationTests.TestFixtures
-
-let private runDotnet (workingDir: string) (args: string list) =
-    let psi =
-        ProcessStartInfo(
-            "dotnet",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            WorkingDirectory = workingDir
-        )
-
-    args |> List.iter psi.ArgumentList.Add
-    use proc = Process.Start(psi)
-    let stdout = proc.StandardOutput.ReadToEnd()
-    let stderr = proc.StandardError.ReadToEnd()
-    proc.WaitForExit()
-    proc.ExitCode, stdout, stderr
 
 /// End-to-end: A -> B, C; B -> D; C -> D (the diamond fixture shape from REQUIREMENTS.md QP-3),
 /// with a real solution file and a NuGet.config at the root to exercise implicit-file resolution

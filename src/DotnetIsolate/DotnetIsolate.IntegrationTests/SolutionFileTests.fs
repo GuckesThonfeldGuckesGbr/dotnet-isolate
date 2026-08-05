@@ -1,7 +1,6 @@
 module DotnetIsolate.IntegrationTests.SolutionFileTests
 
 open System
-open System.Diagnostics
 open System.IO
 open Xunit
 open DotnetIsolate.Core
@@ -44,22 +43,7 @@ let ``a filtered real .sln is a genuinely valid, buildable solution`` () =
         let outputSlnPath = Path.Combine(root, "DotnetIsolate.sln")
         write outputSlnPath filtered
 
-        let psi =
-            ProcessStartInfo(
-                "dotnet",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                WorkingDirectory = root
-            )
+        let exitCode, stdout, stderr =
+            runDotnet root [ "build"; outputSlnPath; "-nodeReuse:false" ]
 
-        psi.ArgumentList.Add("build")
-        psi.ArgumentList.Add(outputSlnPath)
-        psi.ArgumentList.Add("-nodeReuse:false")
-
-        use proc = Process.Start(psi)
-        let stdout = proc.StandardOutput.ReadToEnd()
-        let stderr = proc.StandardError.ReadToEnd()
-        proc.WaitForExit()
-
-        Assert.True(proc.ExitCode = 0, $"dotnet build failed (exit {proc.ExitCode}):\n{stdout}\n{stderr}"))
+        Assert.True((exitCode = 0), $"dotnet build failed (exit {exitCode}):\n{stdout}\n{stderr}"))

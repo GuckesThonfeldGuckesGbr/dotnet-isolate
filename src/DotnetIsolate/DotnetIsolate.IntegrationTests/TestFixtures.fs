@@ -1,6 +1,7 @@
 module DotnetIsolate.IntegrationTests.TestFixtures
 
 open System
+open System.Diagnostics
 open System.IO
 
 /// Writes a minimal net8.0 F# project named `name` under `dir`, referencing `references`
@@ -81,6 +82,26 @@ let writeSolution (path: string) (projects: (string * string) list) =
         + "EndGlobal\r\n"
 
     File.WriteAllText(path, content, Text.UTF8Encoding(true))
+
+/// Shells out to `dotnet <args>` in `workingDir` and returns (exit code, stdout, stderr). These
+/// tests spawn real dotnet/MSBuild subprocesses to prove output is genuinely buildable, not just
+/// plausible-looking text.
+let runDotnet (workingDir: string) (args: string list) =
+    let psi =
+        ProcessStartInfo(
+            "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = workingDir
+        )
+
+    args |> List.iter psi.ArgumentList.Add
+    use proc = Process.Start(psi)
+    let stdout = proc.StandardOutput.ReadToEnd()
+    let stderr = proc.StandardError.ReadToEnd()
+    proc.WaitForExit()
+    proc.ExitCode, stdout, stderr
 
 /// Creates a fresh, uniquely-named temp directory, runs `test` against it, and always deletes it
 /// afterward - even if `test` throws.
