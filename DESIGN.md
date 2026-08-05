@@ -181,13 +181,32 @@ This is why two Dockerfile patterns are documented (DI-1):
 
 ## CI / release pipeline (QP-4, QP-5, QP-7, QP-9)
 
-- GitHub Actions matrix: `{windows, ubuntu, macos} × {net8, net10 SDK}` runs both test projects.
+Implemented at `.github/workflows/build.yml`, three jobs:
+
+- **`test`** — the `{windows, ubuntu, macos} × {net8, net10 SDK}` matrix (POR-1/POR-2/QP-9). The
+  net10 leg sets `DOTNET_ROLL_FORWARD=LatestMajor` rather than mutating `global.json` in CI, to
+  get the SDK-8-pinned repo actually running under the .NET 10 SDK — verified locally (including
+  a full test-suite pass under it) before committing to that approach.
+- **`coverage`** — runs once (not per matrix leg, to avoid 6x redundant coverage collection),
+  computes both coverage numbers using the two `.runsettings` files, and gates on QP-4/QP-5 via
+  `.github/scripts/check-coverage.py` — a standalone, locally-testable script (verified against
+  both a passing and a synthetically-failing threshold before trusting it in CI) rather than
+  inline YAML.
+- **`publish`** — needs both other jobs green; runs on pushes to `main` (green commit → prerelease
+  per QP-7) or a `v<major>.<minor>` tag (→ clean stable release, same job, `dotnet pack` picks up
+  whichever version Nerdbank.GitVersioning computes for that ref). Uses NuGet Trusted Publishing
+  (`NuGet/login@v1`, OIDC token exchange, no stored API key) — the nuget.org policy is already
+  configured for repository `GuckesThonfeldGuckesGbr/dotnet-isolate`, workflow `build.yml`,
+  environment `main`; the job's `environment: main` must keep matching that exactly, or the OIDC
+  exchange fails.
+
+**Outstanding manual step (not something this design doc or the workflow file can do):** the
+`publish` job reads `secrets.NUGET_USER` (your nuget.org profile name, e.g. `ctg`, per the Trusted
+Publishing docs' recommendation of a secret over hardcoding it) — needs adding as a GitHub Actions
+repository secret before the first real publish will succeed.
+
 - Coverage is collected per test project via `coverlet` and reported separately (QP-6) — no merge
   step.
-- Publish gate on pushes to the default branch: build passes, `DotnetIsolate.UnitTests` coverage
-  ≥ 95% and `DotnetIsolate.IntegrationTests` coverage ≥ 90% (QP-4/QP-5) → publish a prerelease
-  package to nuget.org (versioned via Nerdbank.GitVersioning — see below). Git tags matching
-  `v<major>.<minor>` publish a clean stable release instead, following semantic versioning (QP-7).
 - Commit signing (QP-8) is a one-time local/environment setup task, not covered further here.
 
 ### Why unit coverage needs a different scope than integration coverage

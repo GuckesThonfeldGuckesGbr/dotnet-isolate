@@ -1,0 +1,123 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: src/DotnetIsolate
+
+jobs:
+  # POR-1/POR-2/QP-9: build + test across every platform/SDK combination this tool commits to
+  # supporting. Coverage is measured separately (see the `coverage` job) so this matrix stays
+  # fast and isn't duplicating the same coverage collection six times.
+  test:
+    name: test (${{ matrix.os }}, .NET ${{ matrix.dotnet }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        dotnet: ["8.0", "10.0"]
+    runs-on: ${{ matrix.os }}
+    env:
+      # global.json pins to the 8.0.x SDK band; on the "10.0" leg, override that (rather than
+      # mutate global.json in CI) so `dotnet` actually resolves to the installed .NET 10 SDK.
+      # Verified locally: DOTNET_ROLL_FORWARD=LatestMajor correctly selects .NET 10 despite the
+      # global.json pin, TargetFramework stays net8.0 either way (POR-2: single TFM, tested on
+      # both SDKs), and the full test suite passes under it.
+      DOTNET_ROLL_FORWARD: ${{ matrix.dotnet == '10.0' && 'LatestMajor' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - run: dotnet build -c Release
+
+      - run: dotnet test -c Release --no-build
+
+  # QP-4/QP-5: coverage gates, computed once on a single reference platform rather than per
+  # matrix leg. See DESIGN.md ("Why unit coverage needs a different scope than integration
+  # coverage") for why the two runs use different coverlet exclude filters.
+  coverage:
+    name: coverage gates (QP-4, QP-5)
+    runs-on: ubuntu-latest
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - run: dotnet build -c Release
+
+      - name: Unit test coverage
+        run: >
+          dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj -c Release --no-build
+          --collect:"XPlat Code Coverage"
+          --settings DotnetIsolate.UnitTests/coverage.unit.runsettings
+          --results-directory coverage/unit
+
+      - name: Integration test coverage
+        run: >
+          dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj -c Release --no-build
+          --collect:"XPlat Code Coverage"
+          --settings DotnetIsolate.IntegrationTests/coverage.integration.runsettings
+          --results-directory coverage/integration
+
+      - name: Check coverage thresholds
+        id: check
+        run: >
+          python3 ${{ github.workspace }}/.github/scripts/check-coverage.py
+          "coverage/unit/**/coverage.cobertura.xml" 95
+          "coverage/integration/**/coverage.cobertura.xml" 90
+
+  # QP-7/QP-11: every green commit to main publishes a prerelease package; a tag matching
+  # v<major>.<minor> publishes a clean stable release instead. Uses NuGet Trusted Publishing
+  # (OIDC token exchange, no stored API key) - policy already configured on nuget.org for
+  # repository GuckesThonfeldGuckesGbr/dotnet-isolate, workflow build.yml, environment `main`.
+  # `environment: main` below must match that policy exactly, or the OIDC token exchange fails.
+  publish:
+    name: publish to nuget.org
+    needs: [test, coverage]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: main
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Nerdbank.GitVersioning needs full history to compute git height correctly - a shallow
+          # clone would produce a wrong (or minimum) height and thus a wrong version number.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Pack
+        run: dotnet pack DotnetIsolate/DotnetIsolate.fsproj -c Release -o ${{ github.workspace }}/artifacts
+
+      - name: NuGet login (OIDC -> temporary API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: NuGet push
+        run: >
+          dotnet nuget push "${{ github.workspace }}/artifacts/*.nupkg"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
