@@ -1,4 +1,4 @@
-﻿using LogicCommon;
+using LogicCommon;
 
 namespace LogicB;
 

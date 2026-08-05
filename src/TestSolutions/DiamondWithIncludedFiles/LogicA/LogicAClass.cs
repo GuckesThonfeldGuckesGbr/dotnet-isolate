@@ -1,4 +1,4 @@
-﻿namespace LogicA;
+namespace LogicA;
 
 public static class LogicAClass
 {

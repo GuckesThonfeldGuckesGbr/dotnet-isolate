@@ -1,4 +1,4 @@
-﻿namespace LogicCommon;
+namespace LogicCommon;
 
 public static class LogicCommonClass
 {
