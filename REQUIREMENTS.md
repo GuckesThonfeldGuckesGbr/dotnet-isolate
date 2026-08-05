@@ -14,8 +14,7 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   source solution — `.sln` or `.slnx`), derived from the source solution as a template but
   containing only the included projects. This lets `dotnet build`/`dotnet restore` run at the
   output root with no arguments, provided the consuming SDK supports that format — see DESIGN.md
-  for a caveat specific to `.slnx`. **Status:** `.sln` is implemented and dogfooded against this
-  repo's own solution; `.slnx` filtering is not yet implemented.
+  for a caveat specific to `.slnx`. **Status:** both `.sln` and `.slnx` filtering are implemented.
 - **FR-4** — The tool includes every included project's own project file (`.fsproj`/`.csproj`)
   plus every file its `Compile`, `Content`, `None`, and `EmbeddedResource` MSBuild items resolve to
   (via real MSBuild evaluation — see DESIGN.md), plus `ProjectReference` targets, recursively. The
@@ -85,9 +84,11 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   Actions).
 - **QP-3** — Integration tests exercise the tool against a fixed fixture solution with five
   projects — `ServiceA`, `ServiceB`, `LogicA`, `LogicB`, `LogicCommon` — where `ServiceA` depends on
-  `LogicA` + `LogicCommon` and `ServiceB` depends on `LogicB` + `LogicCommon`. Because this input
-  space is small and fully known, the integration suite is expected to cover the tool's complete
-  logic.
+  `LogicA` + `LogicCommon` and `ServiceB` depends on `LogicB`, which itself depends on
+  `LogicCommon`. Because this input space is small and fully known, the integration suite is
+  expected to cover the tool's complete logic. Two fixtures with this shape exist
+  (`src/TestSolutions/DiamondWithIncludedFiles*/`): a `.slnx`/net10.0 one and a `.sln`/net8.0 one,
+  so both solution formats are covered without gating the whole CI matrix on a newer SDK.
 - **QP-4** — Integration test coverage must be ≥ 90%, measured against the *entire*
   `DotnetIsolate.Core` assembly (`DotnetIsolate.IntegrationTests/coverage.integration.runsettings`).
   This is what gates publishing an alpha package to nuget.org on a green commit to the default

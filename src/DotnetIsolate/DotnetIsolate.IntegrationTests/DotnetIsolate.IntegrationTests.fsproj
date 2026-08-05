@@ -17,6 +17,7 @@
         <Compile Include="LinkStrategyTests.fs"/>
         <Compile Include="MaterializeTests.fs"/>
         <Compile Include="SolutionFileTests.fs"/>
+        <Compile Include="DiamondWithIncludedFilesTests.fs"/>
         <Compile Include="PipelineTests.fs"/>
         <Compile Include="DeterminismTests.fs"/>
         <Compile Include="Program.fs"/>
@@ -35,6 +36,7 @@
         </PackageReference>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
         <PackageReference Include="xunit" Version="2.9.3" />
+        <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

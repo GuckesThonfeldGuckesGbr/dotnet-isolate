@@ -83,6 +83,21 @@ let writeSolution (path: string) (projects: (string * string) list) =
 
     File.WriteAllText(path, content, Text.UTF8Encoding(true))
 
+/// Environment variables the outer `dotnet test` muxer sets (resolved via this repo's own
+/// global.json, which pins the SDK to 8.0.0) that a child `dotnet` process would otherwise
+/// inherit and be pinned by, even when its own target (e.g. a net10.0 fixture) needs a different
+/// SDK. Stripped so each subprocess resolves its SDK independently from its own working
+/// directory - found the hard way: a .slnx/net10.0 fixture build failed with NETSDK1045 ("current
+/// SDK does not support net10.0") using SDK 8.0.423, despite 10.0.x being installed and a plain
+/// shell `dotnet build` from the same directory picking it correctly.
+let private inheritedSdkPinningEnvVars =
+    [ "MSBuildSDKsPath"
+      "MSBUILD_EXE_PATH"
+      "MSBuildExtensionsPath"
+      "DOTNET_MSBUILD_SDK_RESOLVER_SDKS_DIR"
+      "DOTNET_MSBUILD_SDK_RESOLVER_CLI_DIR"
+      "DOTNET_HOST_PATH" ]
+
 /// Shells out to `dotnet <args>` in `workingDir` and returns (exit code, stdout, stderr). These
 /// tests spawn real dotnet/MSBuild subprocesses to prove output is genuinely buildable, not just
 /// plausible-looking text.
@@ -95,6 +110,9 @@ let runDotnet (workingDir: string) (args: string list) =
             UseShellExecute = false,
             WorkingDirectory = workingDir
         )
+
+    for var in inheritedSdkPinningEnvVars do
+        psi.Environment.Remove(var) |> ignore
 
     args |> List.iter psi.ArgumentList.Add
     use proc = Process.Start(psi)

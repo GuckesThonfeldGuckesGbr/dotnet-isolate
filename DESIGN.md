@@ -93,9 +93,10 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    the real structure `dotnet sln add` produces (verified directly, not guessed), filters both by
    resolved project path, and is dogfooded against this repo's own real `.sln` in the integration
    suite (the filtered output is written to disk and actually built with `dotnet build`, not just
-   checked as text). `.slnx` (XML) filtering is not yet implemented — same FR-3 contract, but the
-   parsing/rewriting logic is XML-based rather than line-based and hasn't been written. Until it is,
-   isolating a project from a `.slnx` source solution will need this gap closed first.
+   checked as text). `SolutionFileXml.filterSlnx` implements the same FR-3 contract for `.slnx`
+   (XML): keeps only `<Project>` elements whose resolved `Path` is included, recursively drops any
+   `<Folder>` left empty afterward, and writes without a BOM (verified directly: real `.slnx` files
+   don't carry one, unlike `.sln`).
 
    **`.slnx` SDK caveat:** `.slnx` parsing requires a fairly recent SDK (verified directly: .NET 8
    SDK 8.0.423 fails on it outright with `MSB4068`; .NET 10 SDK 10.0.302 handles it fine). This
@@ -246,20 +247,28 @@ not by accident of measurement.
 
 ## Test fixture (QP-3)
 
-A small sample solution lives under `DotnetIsolate.IntegrationTests/Fixtures/` (tentative — see
-"Open questions") with five projects:
+Two sample solutions live under `src/TestSolutions/`, both with the same five-project shape:
 
     ServiceA -> LogicA, LogicCommon
-    ServiceB -> LogicB, LogicCommon
+    ServiceB -> LogicB -> LogicCommon
 
-`LogicCommon` being shared by both services exercises the dedup logic in pipeline step 1, and the
-fixture's small, fully-known shape is what QP-3's "cover the complete logic" expectation leans on.
+`LogicCommon` being shared by both services (directly for ServiceA, transitively via LogicB for
+ServiceB) exercises the dedup logic in pipeline step 1, and the fixture's small, fully-known shape
+is what QP-3's "cover the complete logic" expectation leans on. `LogicCommon` also declares
+`credentials.json` as a real `None` item and explicitly `<None Remove>`s a stray `.env.local` file
+that sits in the same directory but isn't referenced by any MSBuild item - proving file selection
+is driven by real MSBuild evaluation, not naive directory copying.
+
+- `src/TestSolutions/DiamondWithIncludedFiles/` — `.slnx`, projects target `net10.0` (needed to
+  dogfood `.slnx` filtering at all; see the SDK caveat above). Integration tests against it skip
+  gracefully on SDKs below .NET 10.
+- `src/TestSolutions/DiamondWithIncludedFilesSln/` — classic `.sln`, projects target `net8.0`, so
+  it exercises `.sln` filtering unconditionally on every CI leg without any SDK gate.
 
 ## Open questions (not blocking, flag for review before/while implementing)
 
 - Project names: `DotnetIsolate.Core`, `DotnetIsolate`, `DotnetIsolate.UnitTests`,
   `DotnetIsolate.IntegrationTests`, `DotnetIsolate.E2ETests` — assumed, not explicitly confirmed.
-- Fixture solution location: `DotnetIsolate.IntegrationTests/Fixtures/` — assumed.
 
 **Resolved:** NuGet package id / tool command name — `dotnet-isolate` (confirmed available on
 nuget.org, packed and smoke-tested locally as a real global tool: `dotnet isolate` resolves and
