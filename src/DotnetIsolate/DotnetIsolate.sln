@@ -21,6 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{F343F34E-0
 		..\..\REQUIREMENTS.md = ..\..\REQUIREMENTS.md
 	EndProjectSection
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "DotnetIsolate.E2ETests", "DotnetIsolate.E2ETests\DotnetIsolate.E2ETests.fsproj", "{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,5 +48,9 @@ Global
 		{E73BFC7B-FBCB-43BD-86CD-96C808964D7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E73BFC7B-FBCB-43BD-86CD-96C808964D7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E73BFC7B-FBCB-43BD-86CD-96C808964D7C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AEAC5846-34AB-4EC2-AB9D-4630A114F6E9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
