@@ -11,62 +11,82 @@ projects need to compile/run, e.g. `appsettings.json`). The intended use case is
 build contexts and improving layer-cache reuse in CI/CD: copy the isolated folder instead of the
 whole solution, so unrelated changes elsewhere in the repo don't bust the build cache.
 
-Usage (target CLI surface, see README.md for the full example):
+Usage:
 
-    dotnet isolate path/to/<Project>.csproj [-o/--output-dir <name>]
+    dotnet isolate path/to/<Project>.csproj [-o/--output-dir <name>] [-s/--solution <path/to/.sln(x)>]
 
-**Status: early scaffold.** `Program.fs` in both projects is currently just a placeholder
-(`printfn "Hello from F#"` / `main _ = 0`) and `Tests.fs` has a single trivial passing test. The
-actual isolation logic (dependency graph construction, file discovery, hardlink/copy) has not been
-implemented yet. `DESIGN.md` and `REQUIREMENTS.md` exist but are currently empty — check them first,
-since they are meant to hold the authoritative design and numbered requirements as the project
-matures; if they've been filled in since this doc was last updated, prefer their content over the
-notes below.
-
-## Requirements/plan (from README.md, not yet split into REQUIREMENTS.md)
-
-- Hardlink (on Linux/Linux-containers; copy on Windows) all required folders and files into the
-  isolated output folder.
-- Copy/hardlink all files referenced by the csproj files (e.g. `appsettings.json` and anything else
-  that gets compiled/copied in) — not just project references.
-- Don't copy/hardlink anything that isn't needed by the target project.
-- Analysis must be fast — near-instantaneous (<1s) even for a complex solution.
-- Deterministic: running the tool twice on the same input must produce the same output, to keep the
-  Docker layer cache valid.
-- Must run on Windows, Linux, and macOS, targeting both .NET 8 and .NET 10.
-- Planned integration test fixture: a test solution with five projects — `ServiceA`, `ServiceB`,
-  `LogicA`, `LogicB`, `LogicCommon` — where `ServiceA` depends on `LogicA` + `LogicCommon` and
-  `ServiceB` is analogous. This fixture does not exist yet.
-- Planned design approach: build a dependency graph from the solution/csproj files, resolve the set
-  of files needed, then copy/hardlink them into the output subfolder.
+**Status: feature-complete for a v0.1 release, not yet published.** The full pipeline described in
+DESIGN.md (steps 1-7: project graph resolution, per-project file resolution, solution discovery,
+mirror-root computation, link-strategy probe, materialization, scoped solution-file generation) is
+implemented and covered by unit, integration, and Docker E2E tests. Both `.sln` and `.slnx` source
+solutions are supported. `DESIGN.md` and `REQUIREMENTS.md` are populated and authoritative — read
+them first for the actual pipeline algorithm and numbered requirements (`FR-*`, `QP-*`, etc.); this
+doc is a navigation aid, not the source of truth. Not yet done: the package hasn't been published to
+nuget.org, and no `v0.1` tag has been pushed.
 
 ## Repository layout
 
-- `src/DotnetIsolate/` — the .NET solution root (`DotnetIsolate.slnx`, an XML-based `.slnx` solution
-  file rather than the legacy `.sln` format).
-  - `DotnetIsolate/` — the CLI tool project (F#, `net8.0`, `OutputType=Exe`).
-  - `DotnetIsolate.Test/` — xUnit test project (F#, `net8.0`).
+- `src/DotnetIsolate/` — the .NET solution root (`DotnetIsolate.sln`, classic format — an earlier
+  `.slnx` attempt hit an SDK 8 build failure and was reverted, see DESIGN.md).
+  - `DotnetIsolate.Core/` — the isolation logic (project graph, file resolution, link-strategy
+    detection, output materialization, `.sln`/`.slnx` filtering). No CLI/console concerns here.
+  - `DotnetIsolate/` — the CLI entrypoint (F#, `net8.0`, Argu-based), a thin wrapper over Core.
+  - `DotnetIsolate.UnitTests/` — fast, isolated tests of Core's pure logic (QP-5 gate: ≥95%
+    coverage, IO-touching code excluded via `coverage.unit.runsettings`).
+  - `DotnetIsolate.IntegrationTests/` — exercises the whole tool end-to-end, including dogfooding
+    against this repo's own `.sln` and against the fixtures under `src/TestSolutions/` (QP-4 gate:
+    ≥90% coverage of the whole Core assembly).
+  - `DotnetIsolate.E2ETests/` — drives real `docker build` runs against both Dockerfile patterns
+    from README.md's Docker integration section, asserting cache-hit behavior (QP-12). Requires a
+    Docker daemon; not part of the coverage gates.
   - `global.json` — pins the SDK to `8.0.0` with `rollForward: latestMinor`.
+- `src/TestSolutions/` — two real, git-tracked 5-project fixture solutions (`ServiceA`/`ServiceB`/
+  `LogicA`/`LogicB`/`LogicCommon`) used by the integration and E2E suites:
+  `DiamondWithIncludedFiles/` (`.slnx`, `net10.0`) and `DiamondWithIncludedFilesSln/` (`.sln`,
+  `net8.0`, so it builds on every CI leg without needing a newer SDK).
 - `README.md`, `DESIGN.md`, `REQUIREMENTS.md` — linked into the solution under a `/Docs/` solution
-  folder (see `DotnetIsolate.slnx`) so they're visible in IDEs alongside the code.
+  folder so they're visible in IDEs alongside the code.
+- `.github/workflows/build.yml` — CI: `test` (OS × .NET 8/10 matrix), `coverage` (QP-4/QP-5 gates),
+  `e2e` (QP-12 Docker suite), `publish` (needs all three; pushes a prerelease to nuget.org on every
+  green push to `main`, or a stable release on a `v<major>.<minor>` tag, via NuGet Trusted
+  Publishing/OIDC).
 
 ## Commands
 
 Run all commands from `src/DotnetIsolate/` (where the solution file lives).
 
-    dotnet build                              # build the whole solution
-    dotnet test                               # run all tests
-    dotnet test --filter "FullyQualifiedName~Tests.My test"   # run a single test
+    dotnet build -c Release                   # build the whole solution
+    dotnet test -c Release --no-build         # run all three test projects
     dotnet run --project DotnetIsolate        # run the CLI
 
-There is no CI pipeline configured yet; the README notes a GitHub Actions matrix (platform x
-.NET version) is planned but not yet present in the repo.
+To run a single project or filter tests, pass its path explicitly (passing multiple project paths
+to a single `dotnet test` invocation fails with `MSB1008`):
+
+    dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj -c Release --no-build
+    dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter "FullyQualifiedName~keeps only project entries"
+
+The `.slnx`/`net10.0` fixture tests (in `DiamondWithIncludedFilesTests.fs`) use
+`Xunit.SkippableFact` and skip gracefully if only a .NET 8 SDK is installed, rather than failing.
+
+Coverage gates, matching what CI's `coverage` job runs:
+
+    dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj -c Release --no-build \
+      --collect:"XPlat Code Coverage" --settings DotnetIsolate.UnitTests/coverage.unit.runsettings \
+      --results-directory coverage/unit
+    dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj -c Release --no-build \
+      --collect:"XPlat Code Coverage" --settings DotnetIsolate.IntegrationTests/coverage.integration.runsettings \
+      --results-directory coverage/integration
+    python3 ../../.github/scripts/check-coverage.py \
+      "coverage/unit/**/coverage.cobertura.xml" 95 "coverage/integration/**/coverage.cobertura.xml" 90
 
 ## Conventions
 
 - Source is F#, not C# — new code should follow F# idioms (modules, pipelines, immutable data)
   rather than porting C#-style OOP patterns.
-- The README's stated goals include: clean code with small, easily readable functions and sensible
-  namespace/module splitting; semantic versioning where every commit that passes CI and has
-  sufficient coverage is released as an alpha, and tags promote non-alpha releases; eventual
-  publishing to nuget.org; signed commits.
+- Files with IO-touching logic are split from their pure-logic counterparts (e.g.
+  `FileResolution.fs` / `FileResolutionIo.fs`) specifically so `coverage.unit.runsettings` can
+  exclude the IO half by class name — see DESIGN.md for why this is a per-invocation coverlet
+  filter rather than `[<ExcludeFromCodeCoverage>]`.
+- Integration/E2E tests genuinely shell out (`dotnet build`, `docker build`) rather than asserting
+  on plausible-looking text — proving output is really buildable/cacheable, not just well-formed.
+- Commits are GPG/SSH-signed (QP-8).
