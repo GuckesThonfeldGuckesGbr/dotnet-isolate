@@ -41,9 +41,11 @@ let resolveSolutionRoot
     : SolutionRoot option =
     match explicitSolutionPath with
     | Some path ->
+        let absolutePath = Path.GetFullPath(path)
+
         Some
-            { Directory = Path.GetDirectoryName(path)
-              SolutionFile = path
+            { Directory = Path.GetDirectoryName(absolutePath)
+              SolutionFile = absolutePath
               Source = ExplicitlyProvided }
     | None ->
         findSolutionRoot filesIn startProjectDir

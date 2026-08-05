@@ -60,6 +60,23 @@ let ``walks to the filesystem root when there is no ceiling`` () =
     Assert.Contains(nugetRoot, result)
 
 [<Fact>]
+let ``the ceiling is matched even when its case differs from the directory it corresponds to`` () =
+    let dirA = path [ "repo"; "src"; "A" ]
+    let dirRepo = path [ "repo" ]
+    let root = path []
+    let ceilingDifferentCase = path [ "REPO" ]
+    let nugetRepo = path [ "repo"; "NuGet.config" ]
+    let nugetRoot = path [ "NuGet.config" ]
+
+    let filesIn =
+        filesInFrom (Map [ dirA, []; dirRepo, [ nugetRepo ]; root, [ nugetRoot ] ])
+
+    let result = resolve filesIn (Some ceilingDifferentCase) dirA
+
+    Assert.Contains(nugetRepo, result)
+    Assert.DoesNotContain(nugetRoot, result)
+
+[<Fact>]
 let ``resolveForProjects dedups a shared file found via more than one project`` () =
     let dirRepo = path [ "repo" ]
     let propsRepo = path [ "repo"; "Directory.Build.props" ]

@@ -1,5 +1,6 @@
 module DotnetIsolate.Core.Pipeline
 
+open System.Collections.Generic
 open System.IO
 
 type IsolateOptions =
@@ -23,13 +24,30 @@ let isolate (options: IsolateOptions) : IsolateResult =
     let projectPath = Path.GetFullPath(options.ProjectPath)
     let projectDir = Path.GetDirectoryName(projectPath)
 
+    // Steps 1 & 2 both need MSBuild item evaluation per project - ProjectReference to walk the
+    // graph, Compile/Content/None/EmbeddedResource to resolve files. Querying all item types in
+    // one `dotnet msbuild -getItem` call per project (memoized here) instead of two halves the
+    // number of MSBuild process spawns for the whole pipeline.
+    let itemsCache = Dictionary<string, Map<string, string list>>()
+    let allItemTypes = "ProjectReference" :: FileResolutionIo.fileItemTypes
+
+    let getItemsCached (projectPath: string) : Map<string, string list> =
+        match itemsCache.TryGetValue(projectPath) with
+        | true, items -> items
+        | false, _ ->
+            let items = MsBuild.getItems projectPath allItemTypes
+            itemsCache.[projectPath] <- items
+            items
+
+    let projectReferenceResolver: ProjectGraph.ProjectReferenceResolver =
+        fun projectPath -> getItemsCached projectPath |> Map.tryFind "ProjectReference" |> Option.defaultValue []
+
     // Step 1: the transitive project graph.
-    let projects = ProjectGraph.resolve MsBuild.projectReferenceResolver projectPath
+    let projects = ProjectGraph.resolve projectReferenceResolver projectPath
     let projectDirs = projects |> List.map Path.GetDirectoryName
 
-    // Step 2: each project's build-relevant files.
-    let projectFiles =
-        FileResolution.resolveAllFiles FileResolutionIo.projectItemsResolver projects
+    // Step 2: each project's build-relevant files - reuses the items already fetched above.
+    let projectFiles = FileResolution.resolveAllFiles getItemsCached projects
 
     // Step 3: locate the solution, then resolve implicit repo-level files up to it.
     let solutionRoot =
@@ -79,14 +97,14 @@ let isolate (options: IsolateOptions) : IsolateResult =
         let relativeSlnPath = Path.GetRelativePath(mirrorRoot, root.SolutionFile)
         let outputSlnPath = Path.Combine(outputDir, relativeSlnPath)
         Directory.CreateDirectory(Path.GetDirectoryName(outputSlnPath)) |> ignore
-        SolutionFile.write outputSlnPath filtered
+        SolutionFileIo.write outputSlnPath filtered
     | Some root when root.SolutionFile.EndsWith(".slnx") ->
         let sourceContent = File.ReadAllText(root.SolutionFile)
         let filtered = SolutionFileXml.filterSlnx root.Directory (Set.ofList projects) sourceContent
         let relativeSlnPath = Path.GetRelativePath(mirrorRoot, root.SolutionFile)
         let outputSlnPath = Path.Combine(outputDir, relativeSlnPath)
         Directory.CreateDirectory(Path.GetDirectoryName(outputSlnPath)) |> ignore
-        SolutionFileXml.write outputSlnPath filtered
+        SolutionFileXmlIo.write outputSlnPath filtered
     | Some root ->
         // Solution discovery only ever finds .sln/.slnx, so this is unreachable in practice.
         ignore root

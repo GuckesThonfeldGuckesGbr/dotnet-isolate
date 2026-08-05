@@ -1,5 +1,6 @@
 module DotnetIsolate.UnitTests.SolutionDiscoveryTests
 
+open System.IO
 open Xunit
 open DotnetIsolate.Core.SolutionDiscovery
 open DotnetIsolate.UnitTests.PathHelpers
@@ -47,6 +48,16 @@ let ``an explicit solution path always wins over auto-discovery`` () =
 
     Assert.Equal(Some explicitSln, result |> Option.map (fun r -> r.SolutionFile))
     Assert.Equal(Some ExplicitlyProvided, result |> Option.map (fun r -> r.Source))
+
+[<Fact>]
+let ``an explicit relative solution path is resolved to an absolute directory`` () =
+    let filesIn = filesInFrom Map.empty
+    let relativeSln = Path.Combine("sub", "MySolution.sln")
+
+    let result = resolveSolutionRoot filesIn (Some relativeSln) (path [ "repo"; "src"; "Project" ])
+
+    let directory = result |> Option.map (fun r -> r.Directory) |> Option.defaultValue ""
+    Assert.True(Path.IsPathRooted(directory), $"expected an absolute directory, got '{directory}'")
 
 [<Fact>]
 let ``picks the alphabetically-first solution file when a directory has more than one`` () =

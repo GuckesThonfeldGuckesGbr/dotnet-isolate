@@ -11,6 +11,7 @@
     <ItemGroup>
         <Compile Include="TestFixtures.fs"/>
         <Compile Include="ProjectGraphTests.fs"/>
+        <Compile Include="MsBuildProcessTests.fs"/>
         <Compile Include="FileResolutionTests.fs"/>
         <Compile Include="ImplicitFilesTests.fs"/>
         <Compile Include="HardlinkTests.fs"/>

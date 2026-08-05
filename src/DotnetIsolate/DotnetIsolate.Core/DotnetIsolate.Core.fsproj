@@ -14,8 +14,11 @@
         <Compile Include="Hardlink.fs"/>
         <Compile Include="LinkStrategy.fs"/>
         <Compile Include="Materialize.fs"/>
+        <Compile Include="DeclaredProjectPath.fs"/>
         <Compile Include="SolutionFile.fs"/>
+        <Compile Include="SolutionFileIo.fs"/>
         <Compile Include="SolutionFileXml.fs"/>
+        <Compile Include="SolutionFileXmlIo.fs"/>
         <Compile Include="MsBuild.fs"/>
         <Compile Include="FileResolution.fs"/>
         <Compile Include="FileResolutionIo.fs"/>

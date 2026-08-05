@@ -3,19 +3,28 @@ module DotnetIsolate.Core.MsBuild
 open System.Diagnostics
 open System.Text.Json
 
+/// Starts `psi` (which must not already redirect output) and reads stdout/stderr to completion,
+/// returning both plus the exit code. Reads both streams concurrently rather than draining stdout
+/// before starting stderr - a child that writes enough to stderr to fill the OS pipe buffer before
+/// finishing stdout would otherwise deadlock (it blocks writing stderr while we block reading
+/// stdout).
+let runCapturingOutput (psi: ProcessStartInfo) : string * string * int =
+    psi.RedirectStandardOutput <- true
+    psi.RedirectStandardError <- true
+    psi.UseShellExecute <- false
+
+    use proc = Process.Start(psi)
+    let stdoutTask = proc.StandardOutput.ReadToEndAsync()
+    let stderrTask = proc.StandardError.ReadToEndAsync()
+    proc.WaitForExit()
+    stdoutTask.Result, stderrTask.Result, proc.ExitCode
+
 /// Runs `dotnet msbuild -getItem:<types>` against `projectPath` for all of `itemTypes` in a
 /// single process call, and returns each type's resolved absolute paths (`FullPath`) - real
 /// MSBuild evaluation, so SDK-style implicit globs, Directory.Build.props-injected items, and
 /// conditions all resolve correctly. Item types with no matching items are omitted from the map.
 let getItems (projectPath: string) (itemTypes: string list) : Map<string, string list> =
-    let psi =
-        ProcessStartInfo(
-            "dotnet",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        )
-
+    let psi = ProcessStartInfo("dotnet")
     psi.ArgumentList.Add("msbuild")
     psi.ArgumentList.Add(projectPath)
     psi.ArgumentList.Add($"""-getItem:{String.concat "," itemTypes}""")
@@ -25,14 +34,11 @@ let getItems (projectPath: string) (itemTypes: string list) : Map<string, string
     // shared nodes and stall. Not worth the reuse speedup here for correctness's sake.
     psi.ArgumentList.Add("-nodeReuse:false")
 
-    use proc = Process.Start(psi)
-    let stdout = proc.StandardOutput.ReadToEnd()
-    let stderr = proc.StandardError.ReadToEnd()
-    proc.WaitForExit()
+    let stdout, stderr, exitCode = runCapturingOutput psi
 
-    if proc.ExitCode <> 0 then
+    if exitCode <> 0 then
         let types = String.concat "," itemTypes
-        failwith $"dotnet msbuild -getItem:{types} failed for {projectPath} (exit {proc.ExitCode}): {stderr}"
+        failwith $"dotnet msbuild -getItem:{types} failed for {projectPath} (exit {exitCode}): {stderr}"
 
     use doc = JsonDocument.Parse(stdout)
     let itemsElement = doc.RootElement.GetProperty("Items")

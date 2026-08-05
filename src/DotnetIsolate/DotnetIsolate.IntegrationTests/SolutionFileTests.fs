@@ -41,7 +41,7 @@ let ``a filtered real .sln is a genuinely valid, buildable solution`` () =
             File.Copy(file, Path.Combine(destCoreDir, Path.GetFileName(file)))
 
         let outputSlnPath = Path.Combine(root, "DotnetIsolate.sln")
-        write outputSlnPath filtered
+        SolutionFileIo.write outputSlnPath filtered
 
         let exitCode, stdout, stderr =
             runDotnet root [ "build"; outputSlnPath; "-nodeReuse:false" ]

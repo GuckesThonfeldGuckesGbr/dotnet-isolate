@@ -16,7 +16,7 @@ let resolve (filesIn: FilesInDirectory) (ceiling: string option) (startDir: stri
         | Some dir ->
             let here = filesIn dir
 
-            if Some dir = ceiling then
+            if ceiling |> Option.exists (fun c -> System.String.Equals(dir, c, System.StringComparison.OrdinalIgnoreCase)) then
                 here
             else
                 here @ go (Path.GetDirectoryName(dir) |> Option.ofObj)

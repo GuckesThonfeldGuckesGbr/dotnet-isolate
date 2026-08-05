@@ -11,7 +11,7 @@ module DotnetIsolate.Core.FileResolutionIo
 
 /// The MSBuild item types that make up a project's build-relevant files (FR-4). ProjectReference
 /// is resolved separately by ProjectGraph/MsBuild.projectReferenceResolver.
-let fileItemTypes = [ "Compile"; "Content"; "None"; "EmbeddedResource" ]
+let fileItemTypes = FileResolution.fileItemTypes
 
 /// A `FileResolution.ProjectItemsResolver` backed by real MSBuild evaluation.
 let projectItemsResolver: FileResolution.ProjectItemsResolver =

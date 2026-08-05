@@ -1,7 +1,5 @@
 module DotnetIsolate.Core.SolutionFileXml
 
-open System.IO
-open System.Text
 open System.Xml.Linq
 
 let private projectElementName = "Project"
@@ -29,8 +27,9 @@ let filterSlnx (solutionDir: string) (includedAbsolutePaths: Set<string>) (sourc
     let doc = XDocument.Parse(sourceContent)
 
     let resolvedPath (el: XElement) =
-        let declaredPath = el.Attribute(XName.Get "Path").Value
-        Path.GetFullPath(Path.Combine(solutionDir, declaredPath.Replace('\\', Path.DirectorySeparatorChar)))
+        match el.Attribute(XName.Get "Path") with
+        | null -> failwith $"malformed .slnx: a <Project> element is missing its Path attribute: {el}"
+        | attr -> DeclaredProjectPath.resolve solutionDir attr.Value
 
     // XDocument.Parse always yields a document with a root element on success (it throws on
     // malformed XML rather than returning a null root), so no null-handling is needed here.
@@ -44,8 +43,3 @@ let filterSlnx (solutionDir: string) (includedAbsolutePaths: Set<string>) (sourc
     pruneEmptyFolders root
 
     doc.ToString()
-
-/// Writes `content` (as produced by filterSlnx) to `path`. Unlike .sln, real .slnx files carry no
-/// UTF-8 BOM (verified directly against a real .slnx fixture), so none is added here.
-let write (path: string) (content: string) =
-    File.WriteAllText(path, content, UTF8Encoding(false))

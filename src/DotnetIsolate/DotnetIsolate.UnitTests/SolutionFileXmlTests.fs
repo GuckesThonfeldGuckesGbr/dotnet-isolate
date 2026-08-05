@@ -66,6 +66,15 @@ let ``backslash-separated declared paths resolve the same as forward-slash ones`
     Assert.DoesNotContain("B\\B.fsproj", result)
 
 [<Fact>]
+let ``a project element missing its Path attribute produces a clear error, not a crash`` () =
+    let malformed = "<Solution>\n<Project />\n</Solution>"
+
+    let ex =
+        Assert.Throws<System.Exception>(fun () -> filterSlnx "/repo" (Set []) malformed |> ignore)
+
+    Assert.Contains("Path", ex.Message)
+
+[<Fact>]
 let ``a solution with no projects at all is handled without crashing`` () =
     let empty = "<Solution>\n</Solution>"
 

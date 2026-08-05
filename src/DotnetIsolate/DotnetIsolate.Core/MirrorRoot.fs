@@ -8,7 +8,7 @@ let private segments (dir: string) : string list =
 let private commonPrefixOfTwo (a: string list) (b: string list) : string list =
     let rec go a b =
         match a, b with
-        | x :: xs, y :: ys when x = y -> x :: go xs ys
+        | x :: xs, y :: ys when System.String.Equals(x, y, System.StringComparison.OrdinalIgnoreCase) -> x :: go xs ys
         | _ -> []
 
     go a b

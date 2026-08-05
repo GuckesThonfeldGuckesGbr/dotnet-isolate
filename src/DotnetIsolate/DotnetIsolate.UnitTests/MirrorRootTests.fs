@@ -28,6 +28,10 @@ let ``a directory nested inside another still resolves to the shallower one`` ()
 let ``returns none for an empty input`` () = Assert.Equal(None, compute [])
 
 [<Fact>]
+let ``directories that differ only in case are treated as the same ancestor`` () =
+    Assert.Equal(Some(path [ "Repo"; "src" ]), compute [ path [ "Repo"; "src" ]; path [ "repo"; "src" ] ])
+
+[<Fact>]
 let ``a repeated directory does not change the result`` () =
     Assert.Equal(
         Some(path [ "repo"; "src"; "A" ]),

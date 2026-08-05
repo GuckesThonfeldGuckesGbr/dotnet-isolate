@@ -1,7 +1,5 @@
 module DotnetIsolate.Core.SolutionFile
 
-open System.IO
-open System.Text
 open System.Text.RegularExpressions
 
 /// One `Project(...)` ... `EndProject` block from a classic .sln file.
@@ -109,8 +107,7 @@ let private filterGlobalLines (keptGuids: Set<string>) (globalLines: string list
 let filterSln (solutionDir: string) (includedAbsolutePaths: Set<string>) (sourceContent: string) : string =
     let parsed = parse (splitLines sourceContent)
 
-    let resolvedPath (entry: ProjectEntry) =
-        Path.GetFullPath(Path.Combine(solutionDir, entry.DeclaredPath.Replace('\\', Path.DirectorySeparatorChar)))
+    let resolvedPath (entry: ProjectEntry) = DeclaredProjectPath.resolve solutionDir entry.DeclaredPath
 
     let keptEntries =
         parsed.Entries
@@ -124,8 +121,3 @@ let filterSln (solutionDir: string) (includedAbsolutePaths: Set<string>) (source
         List.concat [ parsed.HeaderLines; keptEntryLines; filteredGlobalLines; parsed.TrailerLines ]
 
     outputLines |> String.concat "\r\n"
-
-/// Writes `content` (as produced by filterSln) to `path` with a UTF-8 BOM, matching what
-/// `dotnet sln add` itself produces.
-let write (path: string) (content: string) =
-    File.WriteAllText(path, content, UTF8Encoding(true))
