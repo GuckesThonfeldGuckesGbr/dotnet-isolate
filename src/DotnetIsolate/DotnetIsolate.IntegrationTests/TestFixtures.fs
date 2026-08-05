@@ -121,10 +121,30 @@ let runDotnet (workingDir: string) (args: string list) =
     proc.WaitForExit()
     proc.ExitCode, stdout, stderr
 
+/// Resolves `path` to its canonical, symlink-free form. .NET's Path/Directory APIs are purely
+/// lexical and never resolve symlinks, but Directory.GetCurrentDirectory() - like the underlying
+/// getcwd(3) syscall it wraps on Unix - does. Needed because macOS's /tmp and /var are themselves
+/// symlinks to /private/tmp and /private/var: Path.GetTempPath() returns the unresolved "/var/..."
+/// form, but a `dotnet build` subprocess run with that as its WorkingDirectory can end up
+/// resolving some of its own relative-path references through the symlink and others not,
+/// producing two different absolute spellings of the same physical project - confirmed directly
+/// on macOS CI, where LogicCommon.csproj got restored (and then built) twice, once via each
+/// spelling, racing on the same physical deps.json.
+let private canonicalize (path: string) : string =
+    let previous = Directory.GetCurrentDirectory()
+
+    try
+        Directory.SetCurrentDirectory(path)
+        Directory.GetCurrentDirectory()
+    finally
+        Directory.SetCurrentDirectory(previous)
+
 /// Creates a fresh, uniquely-named temp directory, runs `test` against it, and always deletes it
 /// afterward - even if `test` throws.
 let withTempDir (test: string -> unit) =
     let root = Path.Combine(Path.GetTempPath(), "dotnet-isolate-tests", Path.GetRandomFileName())
+    Directory.CreateDirectory(root) |> ignore
+    let root = canonicalize root
 
     try
         test root
