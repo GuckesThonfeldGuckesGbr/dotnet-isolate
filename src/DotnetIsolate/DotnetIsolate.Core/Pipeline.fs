@@ -80,8 +80,15 @@ let isolate (options: IsolateOptions) : IsolateResult =
         let outputSlnPath = Path.Combine(outputDir, relativeSlnPath)
         Directory.CreateDirectory(Path.GetDirectoryName(outputSlnPath)) |> ignore
         SolutionFile.write outputSlnPath filtered
+    | Some root when root.SolutionFile.EndsWith(".slnx") ->
+        let sourceContent = File.ReadAllText(root.SolutionFile)
+        let filtered = SolutionFileXml.filterSlnx root.Directory (Set.ofList projects) sourceContent
+        let relativeSlnPath = Path.GetRelativePath(mirrorRoot, root.SolutionFile)
+        let outputSlnPath = Path.Combine(outputDir, relativeSlnPath)
+        Directory.CreateDirectory(Path.GetDirectoryName(outputSlnPath)) |> ignore
+        SolutionFileXml.write outputSlnPath filtered
     | Some root ->
-        // .slnx source - filtering not implemented yet (see DESIGN.md), so nothing is generated.
+        // Solution discovery only ever finds .sln/.slnx, so this is unreachable in practice.
         ignore root
     | None -> ()
 
