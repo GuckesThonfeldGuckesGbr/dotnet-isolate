@@ -8,8 +8,10 @@ open DotnetIsolate.Core
 
 /// Not a correctness test, and deliberately asserts no hard wall-clock threshold - CI/dev machine
 /// speed varies too much for a reliable gate, and a flaky perf test is worse than none. Instead it
-/// prints the graph size and timing so a regression (e.g. the MSBuild-spawn-count fix regressing
-/// back to one process per project per pipeline step) is visible by eye across runs.
+/// writes the graph size and timing to BenchmarkResults.write's output so CI can chart the trend
+/// over time (see .github/workflows/build.yml's `performance` job) and a regression (e.g. the
+/// MSBuild-spawn-count fix regressing back to one process per project per pipeline step) is
+/// visible across commits, not just by eye in one run's console output.
 [<Fact>]
 let ``isolating a project out of OrchardCore's real 240+-project graph completes and reports timing`` () =
     let repoRoot = OrchardCoreFixture.clone ()
@@ -47,6 +49,17 @@ let ``isolating a project out of OrchardCore's real 240+-project graph completes
             result.IncludedProjects.Length
             result.FileCount
             stopwatch.ElapsedMilliseconds
+
+        BenchmarkResults.write
+            [ { Name = "OrchardCore.Cms.Web isolate: wall-clock time"
+                Unit = "ms"
+                Value = float stopwatch.ElapsedMilliseconds }
+              { Name = "OrchardCore.Cms.Web isolate: included projects"
+                Unit = "projects"
+                Value = float result.IncludedProjects.Length }
+              { Name = "OrchardCore.Cms.Web isolate: included files"
+                Unit = "files"
+                Value = float result.FileCount } ]
     finally
         Directory.Delete(repoRoot, recursive = true)
 

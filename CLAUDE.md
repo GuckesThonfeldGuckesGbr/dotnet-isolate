@@ -40,11 +40,16 @@ nuget.org, and no `v0.1` tag has been pushed.
     from README.md's Docker integration section, asserting cache-hit behavior (QP-12). Requires a
     Docker daemon; not part of the coverage gates.
   - `DotnetIsolate.PerformanceTests/` — clones a pinned commit of the real, actively-maintained
-    OrchardCMS/OrchardCore solution (241 projects) and isolates one of its projects, reporting
-    wall-clock time and graph size with no hard pass/fail threshold (machine speed varies too much
-    for a reliable gate). Not part of the coverage gates and not wired into CI; run manually with
-    `dotnet test DotnetIsolate.PerformanceTests` when checking for a perf regression. Needs network
-    access (clones from GitHub) and a .NET 10 SDK (OrchardCore targets net10.0).
+    OrchardCMS/OrchardCore solution (241 projects) and isolates one of its projects, writing
+    wall-clock time and graph size to a `customSmallerIsBetter`-shaped JSON file
+    (`BenchmarkResults.fs`) with no hard pass/fail threshold (machine speed varies too much for a
+    reliable gate; PR-1 is phrased in terms of graph depth, not an absolute time - see
+    REQUIREMENTS.md). Not part of the coverage gates, but runs as its own `performance` job in
+    build.yml on every push to `main` and every PR, charting history via
+    benchmark-action/github-action-benchmark on the `gh-pages` branch (only pushed on a real commit
+    to `main`; PR runs just compare against it) - informational only, never fails the build, not a
+    dependency of `publish`. Needs network access (clones from GitHub) and a .NET 10 SDK
+    (OrchardCore targets net10.0).
   - `global.json` — pins the SDK to `8.0.0` with `rollForward: latestMinor`.
 - `src/TestSolutions/` — two real, git-tracked 5-project fixture solutions (`ServiceA`/`ServiceB`/
   `LogicA`/`LogicB`/`LogicCommon`) used by the integration and E2E suites:
@@ -53,8 +58,9 @@ nuget.org, and no `v0.1` tag has been pushed.
 - `README.md`, `DESIGN.md`, `REQUIREMENTS.md` — linked into the solution under a `/Docs/` solution
   folder so they're visible in IDEs alongside the code.
 - `.github/workflows/build.yml` — CI: `test` (OS × .NET 8/10 matrix), `coverage` (QP-4/QP-5 gates),
-  `e2e` (QP-12 Docker suite), `publish` (needs all three; pushes a prerelease to nuget.org on every
-  green push to `main`, or a stable release on a `v<major>.<minor>` tag, via NuGet Trusted
+  `e2e` (QP-12 Docker suite), `performance` (PR-1 benchmark tracking, informational only, not a
+  `publish` dependency), `publish` (needs `test`/`coverage`/`e2e`; pushes a prerelease to nuget.org
+  on every green push to `main`, or a stable release on a `v<major>.<minor>` tag, via NuGet Trusted
   Publishing/OIDC).
 
 ## Commands

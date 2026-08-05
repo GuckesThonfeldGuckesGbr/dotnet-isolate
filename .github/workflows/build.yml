@@ -117,6 +117,55 @@ jobs:
 
       - run: dotnet test DotnetIsolate.E2ETests/DotnetIsolate.E2ETests.fsproj -c Release --no-build
 
+  # PR-1: tracks the analysis phase's wall-clock time and graph size against a real, large
+  # solution (OrchardCMS/OrchardCore) over commits, via benchmark-action/github-action-benchmark,
+  # so a regression is visible as a trend on a chart - not just by eye in one run's console output,
+  # which is easy to stop looking at (hence "otherwise people won't use it"). Deliberately
+  # informational only, same as DotnetIsolate.PerformanceTests itself: machine speed varies too
+  # much (measured ~30-40% run-to-run on the same machine) for a reliable hard gate, so this never
+  # fails the build and isn't one of `publish`'s dependencies. Needs both SDKs: 8.0.x for this
+  # repo's own build (global.json), 10.0.x because OrchardCore itself targets net10.0.
+  performance:
+    name: performance benchmark (informational)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - run: dotnet build -c Release
+
+      - name: Run performance test
+        env:
+          DOTNET_ISOLATE_BENCHMARK_OUTPUT: ${{ github.workspace }}/benchmark-results.json
+        run: dotnet test DotnetIsolate.PerformanceTests/DotnetIsolate.PerformanceTests.fsproj -c Release --no-build
+
+      # Charts historical results on the gh-pages branch (dev/bench/) and comments on a PR if this
+      # run regressed past the threshold - but only persists new history on a real push to main;
+      # a PR run compares against that history without writing to it, since PRs (especially from
+      # forks) shouldn't get to rewrite the recorded baseline.
+      - name: Track benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: "customSmallerIsBetter"
+          output-file-path: benchmark-results.json
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          comment-on-alert: true
+          alert-threshold: "200%"
+          fail-on-alert: false
+
   # QP-7/QP-11: every green commit to main publishes a prerelease package; a tag matching
   # v<major>.<minor> publishes a clean stable release instead. Uses NuGet Trusted Publishing
   # (OIDC token exchange, no stored API key) - policy already configured on nuget.org for

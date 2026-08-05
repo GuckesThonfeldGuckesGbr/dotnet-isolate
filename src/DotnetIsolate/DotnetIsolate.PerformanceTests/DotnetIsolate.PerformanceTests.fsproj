@@ -9,9 +9,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- Clones a real GitHub repo and shells out to git/dotnet restore - not part of the
-             coverage gates, and not meant to run on every push (see build.yml); run manually with
-             `dotnet test DotnetIsolate.PerformanceTests` when checking for a perf regression. -->
+        <!-- Clones a real GitHub repo and shells out to git/dotnet restore. Not part of the
+             coverage gates; runs as its own `performance` job in build.yml (informational only -
+             no hard threshold, see REQUIREMENTS.md's PR-1), or run manually with
+             `dotnet test DotnetIsolate.PerformanceTests`. -->
+        <Compile Include="BenchmarkResults.fs"/>
         <Compile Include="OrchardCoreFixture.fs"/>
         <Compile Include="IsolatePerformanceTests.fs"/>
         <Compile Include="Program.fs"/>
