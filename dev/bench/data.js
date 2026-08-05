@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785960003251,
+  "lastUpdate": 1785960873695,
   "repoUrl": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate",
   "entries": {
     "Benchmark": [
@@ -77,6 +77,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "OrchardCore.Cms.Web isolate: wall-clock time",
             "value": 54082,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "committer": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "distinct": true,
+          "id": "ad21540fcf0349f9c8f2332f04f9374fefd7f7d5",
+          "message": "fix: make explicit-solution-path test assertion platform-agnostic\n\nCompared the resolved SolutionFile against a bare path literal, but\nresolveSolutionRoot runs the explicit path through Path.GetFullPath, which\non Windows resolves a drive-relative literal like \"\\elsewhere\\Other.sln\"\nonto the current drive (e.g. \"D:\\elsewhere\\Other.sln\") - failed on Windows\nCI, passed everywhere else. Resolve the expected value the same way.",
+          "timestamp": "2026-08-05T22:09:06+02:00",
+          "tree_id": "75fcf47e1a71ca3139741638293154da806aea01",
+          "url": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate/commit/ad21540fcf0349f9c8f2332f04f9374fefd7f7d5"
+        },
+        "date": 1785960873035,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "OrchardCore.Cms.Web isolate: included files",
+            "value": 978,
+            "unit": "files"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: included projects",
+            "value": 198,
+            "unit": "projects"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: wall-clock time",
+            "value": 57211,
             "unit": "ms"
           }
         ]
