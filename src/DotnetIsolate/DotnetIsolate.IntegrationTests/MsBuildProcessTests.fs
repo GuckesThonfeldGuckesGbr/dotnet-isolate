@@ -1,5 +1,6 @@
 module DotnetIsolate.IntegrationTests.MsBuildProcessTests
 
+open System
 open System.Diagnostics
 open System.IO
 open System.Threading.Tasks
@@ -12,26 +13,28 @@ open DotnetIsolate.Core
 /// while the parent blocks reading stdout. Uses `dotnet fsi` rather than a shell command so the
 /// repro is cross-platform (no bash/pwsh dependency).
 [<Fact>]
-let ``runCapturingOutput does not deadlock when a process writes heavy stderr before stdout`` () =
-    let script = Path.GetTempFileName() + ".fsx"
+let ``runCapturingOutput does not deadlock when a process writes heavy stderr before stdout`` () : Task =
+    task {
+        let script = Path.GetTempFileName() + ".fsx"
 
-    File.WriteAllText(
-        script,
-        "eprintf \"%s\" (String.replicate 2_000_000 \"x\")\n\
-         printfn \"done\"\n"
-    )
+        File.WriteAllText(
+            script,
+            "eprintf \"%s\" (String.replicate 2_000_000 \"x\")\n\
+             printfn \"done\"\n"
+        )
 
-    try
-        let psi = ProcessStartInfo("dotnet")
-        psi.ArgumentList.Add("fsi")
-        psi.ArgumentList.Add(script)
+        try
+            let psi = ProcessStartInfo("dotnet")
+            psi.ArgumentList.Add("fsi")
+            psi.ArgumentList.Add(script)
 
-        let run = Task.Run(fun () -> MsBuild.runCapturingOutput psi)
-        let completed = run.Wait(System.TimeSpan.FromSeconds(30.0))
+            let work = Task.Run(fun () -> MsBuild.runCapturingOutput psi)
+            let! winner = Task.WhenAny(work, Task.Delay(TimeSpan.FromSeconds 30.0))
 
-        Assert.True(completed, "runCapturingOutput deadlocked instead of completing")
+            Assert.True(obj.ReferenceEquals(winner, work), "runCapturingOutput deadlocked instead of completing")
 
-        let _, _, exitCode = run.Result
-        Assert.Equal(0, exitCode)
-    finally
-        File.Delete(script)
+            let! _, _, exitCode = work
+            Assert.Equal(0, exitCode)
+        finally
+            File.Delete(script)
+    }

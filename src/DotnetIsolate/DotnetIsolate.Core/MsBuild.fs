@@ -4,7 +4,7 @@ open System.Diagnostics
 open System.Text.Json
 
 /// Starts `psi` (which must not already redirect output) and reads stdout/stderr to completion,
-/// returning both plus the exit code. Reads both streams concurrently rather than draining stdout
+/// returning both plus the exit code. Awaits both streams concurrently rather than draining stdout
 /// before starting stderr - a child that writes enough to stderr to fill the OS pipe buffer before
 /// finishing stdout would otherwise deadlock (it blocks writing stderr while we block reading
 /// stdout).
@@ -14,10 +14,16 @@ let runCapturingOutput (psi: ProcessStartInfo) : string * string * int =
     psi.UseShellExecute <- false
 
     use proc = Process.Start(psi)
-    let stdoutTask = proc.StandardOutput.ReadToEndAsync()
-    let stderrTask = proc.StandardError.ReadToEndAsync()
+
+    let stdout, stderr =
+        [ proc.StandardOutput.ReadToEndAsync(); proc.StandardError.ReadToEndAsync() ]
+        |> List.map Async.AwaitTask
+        |> Async.Parallel
+        |> Async.RunSynchronously
+        |> fun outputs -> outputs[0], outputs[1]
+
     proc.WaitForExit()
-    stdoutTask.Result, stderrTask.Result, proc.ExitCode
+    stdout, stderr, proc.ExitCode
 
 /// Runs `dotnet msbuild -getItem:<types>` against `projectPath` for all of `itemTypes` in a
 /// single process call, and returns each type's resolved absolute paths (`FullPath`) - real
