@@ -46,7 +46,13 @@ jobs:
 
       - run: dotnet build -c Release
 
-      - run: dotnet test -c Release --no-build
+      # Target the two projects explicitly rather than `dotnet test -c Release --no-build` at the
+      # solution level - that sweeps in DotnetIsolate.E2ETests too, which needs Docker (with a
+      # working buildx) and isn't meant to run on every OS/SDK leg here; it has its own dedicated
+      # ubuntu-only `e2e` job below.
+      - run: dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj -c Release --no-build
+
+      - run: dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj -c Release --no-build
 
   # QP-4/QP-5: coverage gates, computed once on a single reference platform rather than per
   # matrix leg. See DESIGN.md ("Why unit coverage needs a different scope than integration
