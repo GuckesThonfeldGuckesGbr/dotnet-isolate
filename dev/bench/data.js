@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785946368126,
+  "lastUpdate": 1785960003251,
   "repoUrl": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate",
   "entries": {
     "Benchmark": [
@@ -38,6 +38,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "OrchardCore.Cms.Web isolate: wall-clock time",
             "value": 56095,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "committer": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "distinct": true,
+          "id": "4990d0d5ccb20f9b13b40874450912367dc8637a",
+          "message": "test: cover the default ./<ProjectName> output dir path in Pipeline.isolate\n\nIntegration coverage was sitting right at the 90% gate (90.24% locally);\nPipeline.fs's OutputDir=None branch (FR-6) was never exercised by any\nintegration test, since every existing PipelineTests case passes an\nexplicit -o. Brings integration coverage to 91.46%.\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-05T21:53:22+02:00",
+          "tree_id": "9e5895e3316eb72d2f1633a6bf0b11ed1b84ac96",
+          "url": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate/commit/4990d0d5ccb20f9b13b40874450912367dc8637a"
+        },
+        "date": 1785960002707,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "OrchardCore.Cms.Web isolate: included files",
+            "value": 978,
+            "unit": "files"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: included projects",
+            "value": 198,
+            "unit": "projects"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: wall-clock time",
+            "value": 54082,
             "unit": "ms"
           }
         ]
