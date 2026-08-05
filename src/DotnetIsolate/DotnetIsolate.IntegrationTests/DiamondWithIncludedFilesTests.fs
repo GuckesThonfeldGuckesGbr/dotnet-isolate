@@ -56,7 +56,11 @@ let ``isolating ServiceA from the .sln fixture includes only its dependency clos
         Assert.True(File.Exists(outputSln))
 
         let exitCode, stdout, stderr =
-            runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false" ]
+            // -maxcpucount:1: MSBuild's default parallel solution build can occasionally race
+            // writing a shared dependency's deps.json (GenerateDepsFile IOException) when it's
+            // referenced by two other projects being built concurrently - this fixture's diamond
+            // shape (ServiceA/ServiceB both -> LogicCommon) hits exactly that shape.
+            runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false"; "-maxcpucount:1" ]
 
         Assert.True((exitCode = 0), $"dotnet build failed (exit {exitCode}):\n{stdout}\n{stderr}"))
 
@@ -85,7 +89,11 @@ let ``isolating ServiceB from the .sln fixture includes only its dependency clos
         Assert.True(File.Exists(outputSln))
 
         let exitCode, stdout, stderr =
-            runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false" ]
+            // -maxcpucount:1: MSBuild's default parallel solution build can occasionally race
+            // writing a shared dependency's deps.json (GenerateDepsFile IOException) when it's
+            // referenced by two other projects being built concurrently - this fixture's diamond
+            // shape (ServiceA/ServiceB both -> LogicCommon) hits exactly that shape.
+            runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false"; "-maxcpucount:1" ]
 
         Assert.True((exitCode = 0), $"dotnet build failed (exit {exitCode}):\n{stdout}\n{stderr}"))
 
