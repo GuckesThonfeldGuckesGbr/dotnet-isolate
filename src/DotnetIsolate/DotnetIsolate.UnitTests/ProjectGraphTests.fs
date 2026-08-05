@@ -41,3 +41,23 @@ let ``the entry project is always included even if unreachable from itself`` () 
     let result = resolve resolver "OnlyProject"
 
     Assert.Contains("OnlyProject", result)
+
+/// Levels are evaluated concurrently (see ProjectGraph.fs), so this stresses that fan-out/fan-in
+/// dedup under real thread-pool parallelism: 200 sibling projects at one level all reference the
+/// same shared dependency, which must still show up exactly once.
+[<Fact>]
+let ``a shared dependency discovered concurrently by many sibling projects at the same level is only included once``
+    ()
+    =
+    let siblings = [ for i in 1..200 -> $"Sibling{i}" ]
+
+    let resolver =
+        resolverFrom (
+            Map(("Root", siblings) :: [ for s in siblings -> s, [ "Shared" ] ])
+        )
+
+    let result = resolve resolver "Root"
+
+    Assert.Equal<Set<string>>(Set("Root" :: "Shared" :: siblings), Set result)
+    Assert.Equal(1, result |> List.filter ((=) "Shared") |> List.length)
+    Assert.Equal(202, result.Length)

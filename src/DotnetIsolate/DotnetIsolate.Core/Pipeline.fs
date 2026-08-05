@@ -1,6 +1,6 @@
 module DotnetIsolate.Core.Pipeline
 
-open System.Collections.Generic
+open System.Collections.Concurrent
 open System.IO
 
 type IsolateOptions =
@@ -27,17 +27,13 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // Steps 1 & 2 both need MSBuild item evaluation per project - ProjectReference to walk the
     // graph, Compile/Content/None/EmbeddedResource to resolve files. Querying all item types in
     // one `dotnet msbuild -getItem` call per project (memoized here) instead of two halves the
-    // number of MSBuild process spawns for the whole pipeline.
-    let itemsCache = Dictionary<string, Map<string, string list>>()
+    // number of MSBuild process spawns for the whole pipeline. A ConcurrentDictionary because
+    // ProjectGraph.resolve evaluates each BFS level's projects in parallel.
+    let itemsCache = ConcurrentDictionary<string, Map<string, string list>>()
     let allItemTypes = "ProjectReference" :: FileResolutionIo.fileItemTypes
 
     let getItemsCached (projectPath: string) : Map<string, string list> =
-        match itemsCache.TryGetValue(projectPath) with
-        | true, items -> items
-        | false, _ ->
-            let items = MsBuild.getItems projectPath allItemTypes
-            itemsCache.[projectPath] <- items
-            items
+        itemsCache.GetOrAdd(projectPath, (fun p -> MsBuild.getItems p allItemTypes))
 
     let projectReferenceResolver: ProjectGraph.ProjectReferenceResolver =
         fun projectPath -> getItemsCached projectPath |> Map.tryFind "ProjectReference" |> Option.defaultValue []
