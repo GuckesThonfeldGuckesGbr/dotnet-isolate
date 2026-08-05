@@ -1,7 +1,0 @@
-<Solution>
-  <Project Path="LogicA/LogicA.csproj" />
-  <Project Path="LogicB/LogicB.csproj" />
-  <Project Path="LogicCommon/LogicCommon.csproj" />
-  <Project Path="ServiceA/ServiceA.csproj" />
-  <Project Path="ServiceB/ServiceB.csproj" />
-</Solution>
