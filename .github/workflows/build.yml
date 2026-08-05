@@ -32,6 +32,11 @@ jobs:
       DOTNET_ROLL_FORWARD: ${{ matrix.dotnet == '10.0' && 'LatestMajor' || '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Directory.Build.props pulls in Nerdbank.GitVersioning for every project build (not
+          # just publish), and NBGV needs full history to compute version height - a shallow clone
+          # (actions/checkout's default) makes it throw MSB4018/GitException on `dotnet build`.
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -53,6 +58,8 @@ jobs:
       passed: ${{ steps.check.outputs.passed }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -93,6 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
