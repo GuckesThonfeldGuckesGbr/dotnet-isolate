@@ -24,25 +24,40 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
 ## Pipeline
 
 1. **Resolve the project graph.** Starting from the target `.csproj`, evaluate `ProjectReference`
-   items via `dotnet msbuild -getItem:ProjectReference` and recurse, deduplicating by resolved
-   absolute path — so a diamond dependency like `LogicCommon`, referenced by both `ServiceA` and
-   `ServiceB` in the integration fixture, is only visited once. This produces the full set of
-   projects to include (FR-1, FR-4).
+   items via `dotnet msbuild -getItem:ProjectReference` (in practice, combined with step 2's item
+   types into one call per project — see below) and walk the graph breadth-first, deduplicating by
+   resolved absolute path — so a diamond dependency like `LogicCommon`, referenced by both
+   `ServiceA` and `ServiceB` in the integration fixture, is only visited (and evaluated) once. This
+   produces the full set of projects to include (FR-1, FR-4).
 
-2. **Resolve each project's files.** For every project in that set, run `dotnet msbuild
-   -getItem:Compile;Content;None;EmbeddedResource` to get the real, MSBuild-evaluated file list,
-   and explicitly add the project file itself (`.fsproj`/`.csproj`) — `-getItem` never returns it,
-   since a project file isn't a Compile/Content/None/EmbeddedResource item of itself, but it's
-   obviously required to build the isolated output at all (found the hard way: an early version of
-   this step silently produced an output tree with every source file but no project files, which
-   only surfaced once the end-to-end pipeline test tried to actually build the result). This is
-   what makes FR-4 correct in the face of SDK-style implicit globs, `Directory.Build.props`-injected
-   items, and conditions, without hand-replicating MSBuild's globbing/condition semantics (an
-   alternative that was considered and rejected — see below). Using the `-getItem` CLI surface
-   (available since the .NET 8 SDK) instead of embedding `Microsoft.Build` in-process avoids
-   MSBuildLocator/assembly-loading complexity while still using real evaluation. This step is what
-   PR-1 (sub-1s analysis) depends on most; if it turns out too slow in practice on a cold
-   MSBuild/NuGet cache, the in-process `Microsoft.Build` API is the fallback to revisit.
+   Each BFS level's projects are evaluated *concurrently* rather than one at a time (`ProjectGraph.
+   resolve`, `Array.Parallel.map` over the level's frontier) — a real `dotnet msbuild -getItem`
+   invocation costs ~150-200ms of pure process/host-startup overhead regardless of project size
+   (measured directly against a real 241-project solution), and most real solutions are wide but
+   shallow, so this is what makes PR-1's O(d) (graph depth, not project count) bound achievable:
+   `d` sequential rounds instead of `n` sequential calls. Verified this doesn't reintroduce
+   duplicate evaluation of a shared dependency discovered by multiple siblings in the same level
+   (`ProjectGraphTests.fs`'s call-counting tests assert every distinct project is resolved exactly
+   once, including under that concurrent fan-in).
+
+2. **Resolve each project's files.** For every project in that set, the same `dotnet msbuild
+   -getItem` call from step 1 also requests `Compile;Content;None;EmbeddedResource` (`Pipeline.fs`
+   memoizes the combined per-project result so steps 1 and 2 share one MSBuild spawn instead of
+   two), giving the real, MSBuild-evaluated file list. The project file itself
+   (`.fsproj`/`.csproj`) is added explicitly — `-getItem` never returns it, since a project file
+   isn't a Compile/Content/None/EmbeddedResource item of itself, but it's obviously required to
+   build the isolated output at all (found the hard way: an early version of this step silently
+   produced an output tree with every source file but no project files, which only surfaced once
+   the end-to-end pipeline test tried to actually build the result). This is what makes FR-4
+   correct in the face of SDK-style implicit globs, `Directory.Build.props`-injected items, and
+   conditions, without hand-replicating MSBuild's globbing/condition semantics (an alternative that
+   was considered and rejected — see below). Using the `-getItem` CLI surface (available since the
+   .NET 8 SDK) instead of embedding `Microsoft.Build` in-process avoids MSBuildLocator/assembly-
+   loading complexity while still using real evaluation. Even with the level-parallel BFS above,
+   this per-process overhead is what PR-1's bound is ultimately paying for; if O(d) rounds still
+   isn't fast enough in practice (a very deep graph, or heavy contention from many concurrent
+   `dotnet` processes on a low-core machine), the in-process `Microsoft.Build` API remains the
+   fallback to revisit, since it would eliminate the per-call process-spawn cost entirely.
 
 3. **Locate the solution root, then resolve implicit repo-level files.** If `-s`/`--solution` was
    given, use it directly. Otherwise, walk up from the target project's directory to the first

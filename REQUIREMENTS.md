@@ -42,8 +42,16 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
 
 ## Performance
 
-- **PR-1** — The analysis phase (determining the full set of files/projects to include) completes
-  in under 1 second, even for a complex solution.
+- **PR-1** — The analysis phase (determining the full set of files/projects to include) issues
+  O(d) sequential rounds of external MSBuild evaluation, where d is the depth of the longest
+  project-reference chain from the target project — not O(n) rounds, where n is the total project
+  count. Projects at the same reference depth are evaluated concurrently, so a wide-but-shallow
+  solution (many projects, few reference levels) analyzes in a small, bounded number of rounds
+  regardless of its size. No absolute wall-clock threshold is specified, since that depends on
+  machine parallelism, per-process MSBuild startup overhead, and disk/OS factors outside this
+  tool's control; `DotnetIsolate.PerformanceTests` exists to catch a regression back toward O(n)
+  scaling (e.g. a shared dependency getting re-evaluated once per incoming reference instead of
+  once total), not to gate on a fixed number.
 
 ## Reliability / Determinism
 
