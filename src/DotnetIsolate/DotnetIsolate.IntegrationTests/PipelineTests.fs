@@ -77,3 +77,28 @@ let ``isolate uses an explicitly-provided solution path instead of auto-discover
         Assert.True(result.SolutionRoot.IsSome)
         Assert.Equal(SolutionDiscovery.ExplicitlyProvided, result.SolutionRoot.Value.Source)
         Assert.Equal(explicitSln, result.SolutionRoot.Value.SolutionFile))
+
+/// FR-6: with no explicit -o/--output-dir, the output lands at ./<ProjectName> relative to the
+/// current directory.
+[<Fact>]
+let ``isolate defaults the output directory to ./<ProjectName> when none is given`` () =
+    withTempDir (fun root ->
+        // Nested under "src" so the default output dir ("./A" relative to `root`) can't collide
+        // with the project's own directory - a collision would have Materialize's delete/recreate
+        // (FR-7) wipe the source project before copying it.
+        writeProject (Path.Combine(root, "src", "A")) "A" [] []
+
+        let previousCwd = Directory.GetCurrentDirectory()
+        Directory.SetCurrentDirectory(root)
+
+        let result =
+            try
+                Pipeline.isolate
+                    { ProjectPath = Path.Combine(root, "src", "A", "A.fsproj")
+                      OutputDir = None
+                      SolutionPath = None }
+            finally
+                Directory.SetCurrentDirectory(previousCwd)
+
+        Assert.Equal(Path.Combine(root, "A"), result.OutputDir)
+        Assert.True(File.Exists(Path.Combine(root, "A", "A.fsproj"))))
