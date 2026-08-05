@@ -46,7 +46,11 @@ let ``an explicit solution path always wins over auto-discovery`` () =
     let result =
         resolveSolutionRoot filesIn (Some explicitSln) (path [ "repo"; "src"; "Project" ])
 
-    Assert.Equal(Some explicitSln, result |> Option.map (fun r -> r.SolutionFile))
+    // resolveSolutionRoot runs the explicit path through Path.GetFullPath, which on Windows
+    // resolves a drive-relative literal like "\elsewhere\Other.sln" onto the current drive (e.g.
+    // "D:\elsewhere\Other.sln") - so the expected value must be resolved the same way rather than
+    // compared against the bare literal.
+    Assert.Equal(Some(Path.GetFullPath(explicitSln)), result |> Option.map (fun r -> r.SolutionFile))
     Assert.Equal(Some ExplicitlyProvided, result |> Option.map (fun r -> r.Source))
 
 [<Fact>]
