@@ -32,15 +32,16 @@ let filterSlnx (solutionDir: string) (includedAbsolutePaths: Set<string>) (sourc
         let declaredPath = el.Attribute(XName.Get "Path").Value
         Path.GetFullPath(Path.Combine(solutionDir, declaredPath.Replace('\\', Path.DirectorySeparatorChar)))
 
-    match doc.Root with
-    | null -> ()
-    | root ->
-        root.Descendants(XName.Get projectElementName)
-        |> Seq.toList
-        |> List.filter (fun el -> not (includedAbsolutePaths.Contains(resolvedPath el)))
-        |> List.iter (fun el -> el.Remove())
+    // XDocument.Parse always yields a document with a root element on success (it throws on
+    // malformed XML rather than returning a null root), so no null-handling is needed here.
+    let root = doc.Root
 
-        pruneEmptyFolders root
+    root.Descendants(XName.Get projectElementName)
+    |> Seq.toList
+    |> List.filter (fun el -> not (includedAbsolutePaths.Contains(resolvedPath el)))
+    |> List.iter (fun el -> el.Remove())
+
+    pruneEmptyFolders root
 
     doc.ToString()
 
