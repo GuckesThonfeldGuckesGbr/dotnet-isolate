@@ -96,7 +96,10 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
 - **QP-6** — Unit and integration coverage are tracked and reported separately, not merged into a
   single number.
 - **QP-7** — Every commit merged to the default branch that passes CI (including QP-4/QP-5) is
-  published as an alpha/prerelease package. Only git tags produce a non-alpha (stable) release,
+  published as a prerelease package (versioned via Nerdbank.GitVersioning: `X.Y.<git height>`
+  with a `-g<shorthash>` suffix — a genuine SemVer/NuGet prerelease, hidden from default search,
+  same effect as a literal `-alpha` label without needing a manual edit to remove one at release
+  time). Only git tags matching `v<major>.<minor>` produce a clean, non-prerelease stable release,
   following semantic versioning.
 - **QP-8** — Commits are GPG-signed. (One-time environment/setup task, not a design concern.)
 - **QP-9** — A GitHub Actions pipeline runs a platform × .NET-version matrix for tests.

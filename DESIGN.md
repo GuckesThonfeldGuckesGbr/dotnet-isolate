@@ -209,7 +209,12 @@ fixture's small, fully-known shape is what QP-3's "cover the complete logic" exp
 
 **Resolved:** NuGet package id / tool command name — `dotnet-isolate` (confirmed available on
 nuget.org, packed and smoke-tested locally as a real global tool: `dotnet isolate` resolves and
-runs correctly once installed). Versioning — Nerdbank.GitVersioning. Publishing — NuGet Trusted
-Publishing (OIDC, no stored API key); policy already configured on nuget.org: repository
-`GuckesThonfeldGuckesGbr/dotnet-isolate`, workflow `build.yml`, GitHub environment `main`. First
-published version: `0.1.0`.
+runs correctly once installed). Versioning — Nerdbank.GitVersioning, `version.json` at the repo
+root with `"version": "0.1"` and `publicReleaseRefSpec: ["^refs/tags/v\\d+\\.\\d+"]` (empirically
+verified locally, not just configured — a non-tag build produces `0.1.<height>-g<shorthash>`, a
+build at a matching tag produces a clean `0.1.<height>` with no prerelease component; see QP-7).
+Starting minor version `0.1`, so the first stable tag should be `v0.1` — NBGV fills in the patch
+component from git commit height automatically, so the exact first stable version number (e.g.
+`0.1.47`) depends on how many commits precede that tag, not a fixed `0.1.0`. Publishing — NuGet
+Trusted Publishing (OIDC, no stored API key); policy already configured on nuget.org: repository
+`GuckesThonfeldGuckesGbr/dotnet-isolate`, workflow `build.yml`, GitHub environment `main`.
