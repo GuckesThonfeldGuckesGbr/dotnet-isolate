@@ -205,5 +205,11 @@ fixture's small, fully-known shape is what QP-3's "cover the complete logic" exp
 
 - Project names: `DotnetIsolate.Core`, `DotnetIsolate`, `DotnetIsolate.UnitTests`,
   `DotnetIsolate.IntegrationTests`, `DotnetIsolate.E2ETests` — assumed, not explicitly confirmed.
-- NuGet package id / tool command name: `dotnet-isolate` — assumed.
 - Fixture solution location: `DotnetIsolate.IntegrationTests/Fixtures/` — assumed.
+
+**Resolved:** NuGet package id / tool command name — `dotnet-isolate` (confirmed available on
+nuget.org, packed and smoke-tested locally as a real global tool: `dotnet isolate` resolves and
+runs correctly once installed). Versioning — Nerdbank.GitVersioning. Publishing — NuGet Trusted
+Publishing (OIDC, no stored API key); policy already configured on nuget.org: repository
+`GuckesThonfeldGuckesGbr/dotnet-isolate`, workflow `build.yml`, GitHub environment `main`. First
+published version: `0.1.0`.

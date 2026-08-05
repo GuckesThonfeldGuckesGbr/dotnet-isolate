@@ -5,6 +5,21 @@
         <TargetFramework>net8.0</TargetFramework>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <!-- QP-11: published to nuget.org as a .NET global tool. ToolCommandName matches the
+             `dotnet isolate` usage in README.md - `dotnet <verb>` resolves to an executable named
+             `dotnet-<verb>` on PATH. -->
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>dotnet-isolate</ToolCommandName>
+        <PackageId>dotnet-isolate</PackageId>
+        <Authors>GuckesThonfeldGuckesGbr</Authors>
+        <Description>Isolates the exact set of projects and dependencies required to build a .NET project out of a larger solution, to shrink Docker build contexts and improve layer-cache reuse.</Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate</RepositoryUrl>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+
     <ItemGroup>
         <Compile Include="Program.fs" />
     </ItemGroup>
@@ -15,6 +30,10 @@
 
     <ItemGroup>
       <PackageReference Include="Argu" Version="6.2.5" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="../../../README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
 </Project>
