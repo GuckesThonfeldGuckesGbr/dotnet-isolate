@@ -11,6 +11,16 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "DotnetIsolate.UnitTests", "
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "DotnetIsolate.IntegrationTests", "DotnetIsolate.IntegrationTests\DotnetIsolate.IntegrationTests.fsproj", "{E73BFC7B-FBCB-43BD-86CD-96C808964D7C}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{F343F34E-085F-4E63-AE31-CAB694E20C44}"
+	ProjectSection(SolutionItems) = preProject
+		..\..\CLAUDE.md = ..\..\CLAUDE.md
+		..\..\CONTRIBUTING.md = ..\..\CONTRIBUTING.md
+		..\..\DESIGN.md = ..\..\DESIGN.md
+		..\..\LICENSE = ..\..\LICENSE
+		..\..\README.md = ..\..\README.md
+		..\..\REQUIREMENTS.md = ..\..\REQUIREMENTS.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
