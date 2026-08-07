@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786089157354,
+  "lastUpdate": 1786090689556,
   "repoUrl": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate",
   "entries": {
     "Benchmark": [
@@ -155,6 +155,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "OrchardCore.Cms.Web isolate: wall-clock time",
             "value": 55790,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "committer": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "distinct": true,
+          "id": "9fa9d5369ce73315146b555ce46b555aadfdef54",
+          "message": "chore: normalise the repository to LF and enforce it with .gitattributes\n\nExactly one tracked file was CRLF - DotnetIsolate.sln - because Visual Studio and\n`dotnet sln` write solution files that way. Everything else, including the\nDiamondWithIncludedFilesSln fixture that the integration tests build for real, was\nalready LF, which is the evidence that an LF .sln works fine.\n\n`* text=auto eol=lf` keeps it that way: when VS or `dotnet sln` next writes CRLF,\nGit normalises it on commit instead of producing a whole-file diff that buries the\none line that actually changed.\n\nNothing depends on the repository's own line endings. SolutionFile.filterSln\nnormalises CRLF to LF when it splits and re-joins with CRLF, so its output is\nunaffected by its input - the generated solution stays CRLF, matching what\n`dotnet sln add` produces. The CRLF literals in the test suites are F# escape\nsequences in LF source files, not literal CR bytes.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T10:01:18+02:00",
+          "tree_id": "482d88641622c5cb7c5880427ea0e5625a4b8a62",
+          "url": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate/commit/9fa9d5369ce73315146b555ce46b555aadfdef54"
+        },
+        "date": 1786090689037,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "OrchardCore.Cms.Web isolate: included files",
+            "value": 981,
+            "unit": "files"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: included projects",
+            "value": 198,
+            "unit": "projects"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: wall-clock time",
+            "value": 52836,
             "unit": "ms"
           }
         ]
