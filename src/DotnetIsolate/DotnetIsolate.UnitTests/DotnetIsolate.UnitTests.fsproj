@@ -10,6 +10,7 @@
 
     <ItemGroup>
         <Compile Include="PathHelpers.fs"/>
+        <Compile Include="PathHelpersTests.fs"/>
         <Compile Include="ProjectGraphTests.fs"/>
         <Compile Include="SolutionDiscoveryTests.fs"/>
         <Compile Include="FileResolutionTests.fs"/>

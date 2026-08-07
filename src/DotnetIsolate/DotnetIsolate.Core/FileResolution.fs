@@ -79,6 +79,10 @@ let private itemsOfTypes (types: string list) (items: Map<string, string list>) 
 /// SDK or props file is free to default to something that was never meant to be read (a generated
 /// path under `obj/`, say), and one such value would otherwise fail the whole run when
 /// materialization tried to copy it.
+///
+/// `projectPath` must be *fully qualified* - not merely rooted. On Windows those differ, and
+/// Path.GetFullPath's basePath overload rejects the latter ("\repo\A" has no drive). Pipeline.fs
+/// passes everything through Path.GetFullPath before it gets here.
 let resolvePropertyFiles (fileExists: string -> bool) (properties: Map<string, string>) (projectPath: string) =
     let projectDir = Path.GetDirectoryName(projectPath: string)
 
