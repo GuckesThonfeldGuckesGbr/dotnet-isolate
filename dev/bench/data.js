@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785960873695,
+  "lastUpdate": 1786089157354,
   "repoUrl": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate",
   "entries": {
     "Benchmark": [
@@ -116,6 +116,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "OrchardCore.Cms.Web isolate: wall-clock time",
             "value": 57211,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "committer": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "distinct": true,
+          "id": "b3bf829b1d2467d0110a90fe9e8205bac8bc8814",
+          "message": "docs: explain how files outside the solution folder are handled\n\nThe solution folder is the boundary for file resolution, and the two sides behave\ndifferently: explicitly referenced files are copied from anywhere (raising the\noutput root, which shifts every path in the isolated tree), while auto-discovered\nbuild files stop at the solution folder. Neither was written down, and both change\nwhat a Dockerfile's COPY paths need to look like.\n\nAlso notes that <Import Project=\"...\"/> is not followed, and restores the\n-s/--solution paragraph, which the workaround for out-of-solution build files\ndepends on.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T09:06:31+02:00",
+          "tree_id": "c558d422e33dd47e4d40262f54b24c93145b6f5d",
+          "url": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate/commit/b3bf829b1d2467d0110a90fe9e8205bac8bc8814"
+        },
+        "date": 1786089156578,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "OrchardCore.Cms.Web isolate: included files",
+            "value": 981,
+            "unit": "files"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: included projects",
+            "value": 198,
+            "unit": "projects"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: wall-clock time",
+            "value": 55790,
             "unit": "ms"
           }
         ]
