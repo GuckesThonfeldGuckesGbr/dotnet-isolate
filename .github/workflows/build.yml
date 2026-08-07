@@ -31,14 +31,14 @@ jobs:
       # both SDKs), and the full test suite passes under it.
       DOTNET_ROLL_FORWARD: ${{ matrix.dotnet == '10.0' && 'LatestMajor' || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Directory.Build.props pulls in Nerdbank.GitVersioning for every project build (not
           # just publish), and NBGV needs full history to compute version height - a shallow clone
           # (actions/checkout's default) makes it throw MSB4018/GitException on `dotnet build`.
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -63,11 +63,11 @@ jobs:
     outputs:
       passed: ${{ steps.check.outputs.passed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -105,11 +105,11 @@ jobs:
     name: docker e2e (QP-12)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -132,11 +132,11 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -181,13 +181,13 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Nerdbank.GitVersioning needs full history to compute git height correctly - a shallow
           # clone would produce a wrong (or minimum) height and thus a wrong version number.
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
