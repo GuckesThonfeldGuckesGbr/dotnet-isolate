@@ -40,24 +40,66 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    (`ProjectGraphTests.fs`'s call-counting tests assert every distinct project is resolved exactly
    once, including under that concurrent fan-in).
 
-2. **Resolve each project's files.** For every project in that set, the same `dotnet msbuild
-   -getItem` call from step 1 also requests `Compile;Content;None;EmbeddedResource` (`Pipeline.fs`
-   memoizes the combined per-project result so steps 1 and 2 share one MSBuild spawn instead of
-   two), giving the real, MSBuild-evaluated file list. The project file itself
-   (`.fsproj`/`.csproj`) is added explicitly — `-getItem` never returns it, since a project file
-   isn't a Compile/Content/None/EmbeddedResource item of itself, but it's obviously required to
-   build the isolated output at all (found the hard way: an early version of this step silently
-   produced an output tree with every source file but no project files, which only surfaced once
-   the end-to-end pipeline test tried to actually build the result). This is what makes FR-4
-   correct in the face of SDK-style implicit globs, `Directory.Build.props`-injected items, and
-   conditions, without hand-replicating MSBuild's globbing/condition semantics (an alternative that
-   was considered and rejected — see below). Using the `-getItem` CLI surface (available since the
-   .NET 8 SDK) instead of embedding `Microsoft.Build` in-process avoids MSBuildLocator/assembly-
-   loading complexity while still using real evaluation. Even with the level-parallel BFS above,
-   this per-process overhead is what PR-1's bound is ultimately paying for; if O(d) rounds still
-   isn't fast enough in practice (a very deep graph, or heavy contention from many concurrent
-   `dotnet` processes on a low-core machine), the in-process `Microsoft.Build` API remains the
-   fallback to revisit, since it would eliminate the per-call process-spawn cost entirely.
+2. **Resolve each project's files.** For every project in that set, the same `dotnet msbuild`
+   call from step 1 also requests every item type in `FileResolution.fileItemTypes` — the compile
+   inputs (`Compile`, `Content`, `None`, `EmbeddedResource`), the analyzer inputs
+   (`AdditionalFiles`, which is how StyleCop's `stylecop.json` reaches csc), the WPF ones (`Page`,
+   `ApplicationDefinition`, `Resource`), and `TypeScriptCompile`. `Pipeline.fs` memoizes the
+   combined per-project result so steps 1 and 2 share one MSBuild spawn instead of two. The project
+   file itself (`.fsproj`/`.csproj`) is added explicitly — `-getItem` never returns it, since a
+   project file isn't an item of itself, but it's obviously required to build the isolated output
+   at all (found the hard way: an early version of this step silently produced an output tree with
+   every source file but no project files, which only surfaced once the end-to-end pipeline test
+   tried to actually build the result).
+
+   Two item types are conspicuously *absent*, and were checked rather than assumed: `Analyzer`
+   resolves into the SDK installation and `Reference` into the NuGet cache. Copying either would
+   drag the mirror root (step 4) out of the repo entirely, and the container restores both for
+   itself. `Reference` has a second problem — its file path lives in `HintPath` metadata, not in
+   `FullPath`, which for a `Reference` is a meaningless project-dir-plus-assembly-name string. An
+   in-tree `<Reference><HintPath>` is therefore a known gap, and a deliberate one for now.
+
+   The same call also carries `-getProperty` (FR-9), because not every build-relevant input is an
+   *item*. Analyzer setups are the motivating case: `stylecop.json` arrives as an `AdditionalFiles`
+   item, but the `.ruleset` next to it is named by the `CodeAnalysisRuleSet` *property*, so no
+   amount of `-getItem` querying would ever surface it — and a missing ruleset doesn't degrade the
+   isolated build, it fails it outright. `AssemblyOriginatorKeyFile`, `ApplicationIcon`,
+   `ApplicationManifest`, `Win32Resource`, and `Win32Manifest` are the same shape. `-getItem` and
+   `-getProperty` combine in a single `dotnet msbuild` invocation
+   (`MsBuild.getItemsAndProperties`), so this costs no extra process spawns and leaves PR-1's bound
+   untouched.
+
+   Properties differ from items in two respects that matter here. First, `-getProperty` returns the
+   raw evaluated string, not resolved `FullPath` metadata, so a relative value like
+   `..\..\analysis.ruleset` is made absolute against the project's own directory
+   (`FileResolution.resolvePropertyFiles`). Second, a property is a lone scalar that any SDK or
+   props file may default to something never meant to be read, so values naming no existing file
+   are dropped rather than failing the whole run at materialization. Only properties naming build
+   *inputs* belong in the list at all — `DocumentationFile` is deliberately excluded, since it
+   names a file the compiler writes rather than reads.
+
+   `EditorConfigFiles` is handled separately again (`ancestorGlobbedItemTypes`, FR-10) because
+   MSBuild *auto-discovers* it by climbing the directory tree, and that climb doesn't stop at the
+   repo: a stray `~/.editorconfig` without `root = true` resolves for every project, and copying it
+   in would pull the mirror root up to the home directory. These items are therefore filtered to
+   the solution root — the same ceiling FR-5's walk-up already uses — which is why step 3's
+   solution discovery runs *before* this step in `Pipeline.isolate` (it needs no MSBuild evaluation
+   of its own, so the reordering is free). One wrinkle found by testing rather than assumption: the
+   C# SDK populates `EditorConfigFiles` at evaluation time but the F# SDK leaves it empty, so
+   `.editorconfig` is *also* carried by name in FR-5's language-agnostic walk-up. The item query
+   still earns its place — it finds `.editorconfig` files nested *inside* a project, which a
+   walk-up from the project directory never looks at.
+
+   All of this is what makes FR-4 correct in the face of SDK-style implicit globs,
+   `Directory.Build.props`-injected items, and conditions, without hand-replicating MSBuild's
+   globbing/condition semantics (an alternative that was considered and rejected — see below).
+   Using the `-getItem` CLI surface (available since the .NET 8 SDK) instead of embedding
+   `Microsoft.Build` in-process avoids MSBuildLocator/assembly-loading complexity while still using
+   real evaluation. Even with the level-parallel BFS above, this per-process overhead is what PR-1's
+   bound is ultimately paying for; if O(d) rounds still isn't fast enough in practice (a very deep
+   graph, or heavy contention from many concurrent `dotnet` processes on a low-core machine), the
+   in-process `Microsoft.Build` API remains the fallback to revisit, since it would eliminate the
+   per-call process-spawn cost entirely.
 
 3. **Locate the solution root, then resolve implicit repo-level files.** If `-s`/`--solution` was
    given, use it directly. Otherwise, walk up from the target project's directory to the first
@@ -70,9 +112,13 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
 
    Then, for every project directory found in step 1, walk upward through parent directories
    collecting `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`,
-   `NuGet.config`, and `global.json` wherever they occur, up to that ceiling (FR-5). Every
-   occurrence is collected, not just the nearest, since `Directory.Build.props` chains commonly
-   import further-up parents explicitly.
+   `NuGet.config`, `global.json`, and `.editorconfig` wherever they occur, up to that ceiling
+   (FR-5). Every occurrence is collected, not just the nearest, since `Directory.Build.props`
+   chains commonly import further-up parents explicitly.
+
+   Note the ordering in `Pipeline.isolate`: the solution-discovery half of this step runs *before*
+   step 2, which needs the ceiling for its ancestor-globbed items. Only the walk-up half genuinely
+   comes after step 1.
 
 4. **Compute the mirror root.** The common ancestor of every path collected in steps 1–3 becomes
    the root that gets mirrored into the output folder (FR-2). Nothing above it is copied. The

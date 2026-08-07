@@ -25,15 +25,27 @@ let runCapturingOutput (psi: ProcessStartInfo) : string * string * int =
     proc.WaitForExit()
     stdout, stderr, proc.ExitCode
 
-/// Runs `dotnet msbuild -getItem:<types>` against `projectPath` for all of `itemTypes` in a
-/// single process call, and returns each type's resolved absolute paths (`FullPath`) - real
-/// MSBuild evaluation, so SDK-style implicit globs, Directory.Build.props-injected items, and
-/// conditions all resolve correctly. Item types with no matching items are omitted from the map.
-let getItems (projectPath: string) (itemTypes: string list) : Map<string, string list> =
+/// Runs `dotnet msbuild -getItem:<types> -getProperty:<names>` against `projectPath` for all of
+/// `itemTypes` and `propertyNames` in a single process call, and returns each item type's resolved
+/// absolute paths (`FullPath`) plus each property's evaluated value - real MSBuild evaluation, so
+/// SDK-style implicit globs, Directory.Build.props-injected items, and conditions all resolve
+/// correctly. Item types with no matching items are omitted from the item map; unset properties
+/// come back as empty strings (MSBuild always emits a key for a requested property).
+let getItemsAndProperties
+    (projectPath: string)
+    (itemTypes: string list)
+    (propertyNames: string list)
+    : Map<string, string list> * Map<string, string> =
     let psi = ProcessStartInfo("dotnet")
     psi.ArgumentList.Add("msbuild")
     psi.ArgumentList.Add(projectPath)
-    psi.ArgumentList.Add($"""-getItem:{String.concat "," itemTypes}""")
+
+    if not (List.isEmpty itemTypes) then
+        psi.ArgumentList.Add($"""-getItem:{String.concat "," itemTypes}""")
+
+    if not (List.isEmpty propertyNames) then
+        psi.ArgumentList.Add($"""-getProperty:{String.concat "," propertyNames}""")
+
     psi.ArgumentList.Add("-nologo")
     // Node reuse leaves a persistent MSBuild server process behind; harmless for one call, but
     // many concurrent/nested calls (as happen across this tool's own test suite) can queue up on
@@ -44,21 +56,51 @@ let getItems (projectPath: string) (itemTypes: string list) : Map<string, string
 
     if exitCode <> 0 then
         let types = String.concat "," itemTypes
-        failwith $"dotnet msbuild -getItem:{types} failed for {projectPath} (exit {exitCode}): {stderr}"
+        let names = String.concat "," propertyNames
+        failwith
+            $"dotnet msbuild -getItem:{types} -getProperty:{names} failed for {projectPath} (exit {exitCode}): {stderr}"
 
     use doc = JsonDocument.Parse(stdout)
-    let itemsElement = doc.RootElement.GetProperty("Items")
 
-    itemTypes
-    |> List.choose (fun itemType ->
-        let mutable items = Unchecked.defaultof<JsonElement>
+    let section (name: string) =
+        let mutable element = Unchecked.defaultof<JsonElement>
 
-        if itemsElement.TryGetProperty(itemType, &items) then
-            let paths = [ for item in items.EnumerateArray() -> item.GetProperty("FullPath").GetString() ]
-            Some(itemType, paths)
-        else
-            None)
-    |> Map.ofList
+        if doc.RootElement.TryGetProperty(name, &element) then Some element else None
+
+    let items =
+        match section "Items" with
+        | None -> Map.empty
+        | Some itemsElement ->
+            itemTypes
+            |> List.choose (fun itemType ->
+                let mutable items = Unchecked.defaultof<JsonElement>
+
+                if itemsElement.TryGetProperty(itemType, &items) then
+                    let paths = [ for item in items.EnumerateArray() -> item.GetProperty("FullPath").GetString() ]
+                    Some(itemType, paths)
+                else
+                    None)
+            |> Map.ofList
+
+    let properties =
+        match section "Properties" with
+        | None -> Map.empty
+        | Some propertiesElement ->
+            propertyNames
+            |> List.choose (fun name ->
+                let mutable value = Unchecked.defaultof<JsonElement>
+
+                if propertiesElement.TryGetProperty(name, &value) then
+                    Some(name, value.GetString())
+                else
+                    None)
+            |> Map.ofList
+
+    items, properties
+
+/// Runs `dotnet msbuild -getItem:<types>` and returns each type's resolved absolute paths.
+let getItems (projectPath: string) (itemTypes: string list) : Map<string, string list> =
+    getItemsAndProperties projectPath itemTypes [] |> fst
 
 /// Runs `dotnet msbuild -getItem:<itemType>` and returns just that type's resolved absolute paths.
 let getItemFullPaths (projectPath: string) (itemType: string) : string list =

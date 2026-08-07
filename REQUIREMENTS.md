@@ -16,15 +16,18 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   output root with no arguments, provided the consuming SDK supports that format — see DESIGN.md
   for a caveat specific to `.slnx`. **Status:** both `.sln` and `.slnx` filtering are implemented.
 - **FR-4** — The tool includes every included project's own project file (`.fsproj`/`.csproj`)
-  plus every file its `Compile`, `Content`, `None`, and `EmbeddedResource` MSBuild items resolve to
-  (via real MSBuild evaluation — see DESIGN.md), plus `ProjectReference` targets, recursively. The
-  project file itself is included explicitly, not via an MSBuild item type — `dotnet msbuild
-  -getItem` never returns it, since a project file isn't a Compile/Content/None/EmbeddedResource
-  item of itself.
+  plus every file its `Compile`, `Content`, `None`, `EmbeddedResource`, `AdditionalFiles`, `Page`,
+  `ApplicationDefinition`, `Resource`, and `TypeScriptCompile` MSBuild items resolve to (via real
+  MSBuild evaluation — see DESIGN.md), plus `ProjectReference` targets, recursively. These paths
+  are taken at face value even when they point outside the solution tree, since every one of them
+  was authored by hand. The project file itself is included explicitly, not via an MSBuild item
+  type — `dotnet msbuild -getItem` never returns it, since a project file isn't an item of itself.
+  `Analyzer` and `Reference` are deliberately excluded: they resolve into the SDK install and the
+  NuGet cache, which the container restores for itself.
 - **FR-5** — The tool walks up from each included project's directory and includes any
   `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `NuGet.config`,
-  and `global.json` files it finds along the way, since MSBuild implicitly consumes these during
-  restore/build even though they're never referenced explicitly by a project.
+  `global.json`, and `.editorconfig` files it finds along the way, since MSBuild implicitly
+  consumes these during restore/build even though they're never referenced explicitly by a project.
 - **FR-6** — The output location defaults to `./<ProjectName>` and is overridable with
   `-o`/`--output-dir`, which accepts any relative or absolute path (not just a plain name created
   inside the current directory).
@@ -40,6 +43,20 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   solution generation is skipped and FR-5's walk-up runs all the way to the filesystem root
   instead.
 
+- **FR-9** — Not every build-relevant input is an MSBuild *item*: some are named by a *property*
+  whose value is a path, and `-getItem` can never see them. The tool additionally includes the
+  files named by each project's `CodeAnalysisRuleSet` (the `.ruleset` analyzers read),
+  `AssemblyOriginatorKeyFile`, `ApplicationIcon`, `ApplicationManifest`, `Win32Resource`, and
+  `Win32Manifest` properties, each resolved relative to the project's own directory when the
+  value is relative. A property whose value names no existing file is skipped, since an SDK is
+  free to default one to a path that was never meant to be read. Only properties naming build
+  *inputs* qualify — `DocumentationFile`, for instance, names a file the compiler *writes*, so it
+  is deliberately not included.
+- **FR-10** — Some MSBuild items are *auto-discovered* by globbing up the directory tree rather
+  than authored, and their walk has no natural stopping point: `EditorConfigFiles` resolves a
+  `.editorconfig` from the user's home directory as readily as from the repo. The tool includes
+  these too, but bounds them by the solution root (FR-8) — the same ceiling FR-5 already uses —
+  so an out-of-repo file can never be copied in and drag the mirror root (FR-2) out with it.
 ## Performance
 
 - **PR-1** — The analysis phase (determining the full set of files/projects to include) issues

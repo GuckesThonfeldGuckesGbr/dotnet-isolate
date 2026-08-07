@@ -13,6 +13,12 @@ let private commonPrefixOfTwo (a: string list) (b: string list) : string list =
 
     go a b
 
+/// True when `path` is `directory` itself or sits somewhere beneath it - segment-wise, so
+/// "/repo/src2/x" is never mistaken for a descendant of "/repo/src". Both must be absolute.
+let isUnder (directory: string) (path: string) : bool =
+    let dirSegments = segments directory
+    commonPrefixOfTwo dirSegments (segments path) |> List.length = List.length dirSegments
+
 /// Computes the longest common ancestor directory shared by every directory in `directories`
 /// (FR-2, pipeline step 4) - compares path segments, not raw string prefixes, so
 /// "/repo/src2" is never mistaken for a descendant of "/repo/src". None for an empty input.

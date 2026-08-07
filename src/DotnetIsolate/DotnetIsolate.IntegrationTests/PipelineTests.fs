@@ -102,3 +102,77 @@ let ``isolate defaults the output directory to ./<ProjectName> when none is give
 
         Assert.Equal(Path.Combine(root, "A"), result.OutputDir)
         Assert.True(File.Exists(Path.Combine(root, "A", "A.fsproj"))))
+
+/// FR-4 regression: an analyzer setup - a repo-root `.ruleset` referenced by the
+/// `<CodeAnalysisRuleSet>` *property* (not an item, so `-getItem` alone never sees it) and a
+/// `stylecop.json` carried by `<AdditionalFiles>` - must land in the isolated output. Without
+/// both, the isolated build fails outright ("could not open rule set file") rather than silently
+/// degrading, which is exactly why they can't be treated as optional extras.
+[<Fact>]
+let ``isolate copies analyzer inputs: the CodeAnalysisRuleSet file and AdditionalFiles`` () =
+    withTempDir (fun root ->
+        File.WriteAllText(
+            Path.Combine(root, "analysis.ruleset"),
+            """<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="Fixture" ToolsVersion="16.0" />
+"""
+        )
+
+        // The ruleset is injected the way real repos do it - once, for every project - while each
+        // project brings its own stylecop.json next to itself.
+        File.WriteAllText(
+            Path.Combine(root, "Directory.Build.props"),
+            """<Project>
+  <PropertyGroup>
+    <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)analysis.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+</Project>
+"""
+        )
+
+        for name in [ "A"; "B" ] do
+            let dir = Path.Combine(root, name)
+            Directory.CreateDirectory(dir) |> ignore
+            File.WriteAllText(Path.Combine(dir, "stylecop.json"), "{}")
+            File.WriteAllText(Path.Combine(dir, "Program.fs"), $"module {name}.Program")
+
+            let reference =
+                if name = "A" then """<ProjectReference Include="../B/B.fsproj"/>""" else ""
+
+            File.WriteAllText(
+                Path.Combine(dir, $"{name}.fsproj"),
+                $"""<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.fs"/>
+    <AdditionalFiles Include="stylecop.json"/>
+    {reference}
+  </ItemGroup>
+</Project>
+"""
+            )
+
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj"; "B", "B/B.fsproj" ]
+
+        let outputDir = Path.Combine(root, "output")
+
+        Pipeline.isolate
+            { ProjectPath = Path.Combine(root, "A", "A.fsproj")
+              OutputDir = Some outputDir
+              SolutionPath = None }
+        |> ignore
+
+        Assert.True(File.Exists(Path.Combine(outputDir, "analysis.ruleset")), "the CodeAnalysisRuleSet file")
+        Assert.True(File.Exists(Path.Combine(outputDir, "A", "stylecop.json")), "A's AdditionalFiles entry")
+        Assert.True(File.Exists(Path.Combine(outputDir, "B", "stylecop.json")), "B's AdditionalFiles entry")
+
+        // And the isolated tree still builds - proving the ruleset resolves from its mirrored
+        // location, not just that a file with the right name was copied somewhere.
+        let outputSln = Path.Combine(outputDir, "Fixture.sln")
+
+        let exitCode, stdout, stderr =
+            runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false" ]
+
+        Assert.True((exitCode = 0), $"dotnet build failed (exit {exitCode}):\n{stdout}\n{stderr}"))

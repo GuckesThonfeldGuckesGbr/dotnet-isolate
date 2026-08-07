@@ -11,8 +11,23 @@ module DotnetIsolate.Core.FileResolutionIo
 
 /// The MSBuild item types that make up a project's build-relevant files (FR-4). ProjectReference
 /// is resolved separately by ProjectGraph/MsBuild.projectReferenceResolver.
-let fileItemTypes = FileResolution.fileItemTypes
+let fileItemTypes = FileResolution.fileItemTypes @ FileResolution.ancestorGlobbedItemTypes
+
+/// The MSBuild properties whose values point at build-relevant input files (FR-9).
+let filePathPropertyNames = FileResolution.filePathPropertyNames
 
 /// A `FileResolution.ProjectItemsResolver` backed by real MSBuild evaluation.
 let projectItemsResolver: FileResolution.ProjectItemsResolver =
     fun projectPath -> MsBuild.getItems projectPath fileItemTypes
+
+/// A `FileResolution.ProjectPropertiesResolver` backed by real MSBuild evaluation.
+let projectPropertiesResolver: FileResolution.ProjectPropertiesResolver =
+    fun projectPath -> MsBuild.getItemsAndProperties projectPath fileItemTypes filePathPropertyNames |> snd
+
+/// `FileResolution.Resolvers` backed by real MSBuild evaluation and the real filesystem, bounded
+/// by `ancestorCeiling` (the solution root, when one was found).
+let resolvers (ancestorCeiling: string option) : FileResolution.Resolvers =
+    { GetItems = projectItemsResolver
+      GetProperties = projectPropertiesResolver
+      FileExists = System.IO.File.Exists
+      AncestorCeiling = ancestorCeiling }

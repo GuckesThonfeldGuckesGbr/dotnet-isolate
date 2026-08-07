@@ -24,16 +24,21 @@ let isolate (options: IsolateOptions) : IsolateResult =
     let projectPath = Path.GetFullPath(options.ProjectPath)
     let projectDir = Path.GetDirectoryName(projectPath)
 
-    // Steps 1 & 2 both need MSBuild item evaluation per project - ProjectReference to walk the
-    // graph, Compile/Content/None/EmbeddedResource to resolve files. Querying all item types in
-    // one `dotnet msbuild -getItem` call per project (memoized here) instead of two halves the
-    // number of MSBuild process spawns for the whole pipeline. A ConcurrentDictionary because
-    // ProjectGraph.resolve evaluates each BFS level's projects in parallel.
-    let itemsCache = ConcurrentDictionary<string, Map<string, string list>>()
+    // Steps 1 & 2 both need MSBuild evaluation per project - ProjectReference to walk the graph,
+    // the file item types plus the file-path properties (e.g. CodeAnalysisRuleSet) to resolve
+    // files. Querying all of them in one `dotnet msbuild -getItem -getProperty` call per project
+    // (memoized here) instead of one per concern keeps the number of MSBuild process spawns - the
+    // pipeline's dominant cost, see PR-1 - at exactly one per project. A ConcurrentDictionary
+    // because ProjectGraph.resolve evaluates each BFS level's projects in parallel.
+    let evaluationCache = ConcurrentDictionary<string, Map<string, string list> * Map<string, string>>()
     let allItemTypes = "ProjectReference" :: FileResolutionIo.fileItemTypes
+    let allPropertyNames = FileResolutionIo.filePathPropertyNames
 
-    let getItemsCached (projectPath: string) : Map<string, string list> =
-        itemsCache.GetOrAdd(projectPath, (fun p -> MsBuild.getItems p allItemTypes))
+    let evaluateCached (projectPath: string) =
+        evaluationCache.GetOrAdd(projectPath, (fun p -> MsBuild.getItemsAndProperties p allItemTypes allPropertyNames))
+
+    let getItemsCached (projectPath: string) : Map<string, string list> = evaluateCached projectPath |> fst
+    let getPropertiesCached (projectPath: string) : Map<string, string> = evaluateCached projectPath |> snd
 
     let projectReferenceResolver: ProjectGraph.ProjectReferenceResolver =
         fun projectPath -> getItemsCached projectPath |> Map.tryFind "ProjectReference" |> Option.defaultValue []
@@ -42,10 +47,10 @@ let isolate (options: IsolateOptions) : IsolateResult =
     let projects = ProjectGraph.resolve projectReferenceResolver projectPath
     let projectDirs = projects |> List.map Path.GetDirectoryName
 
-    // Step 2: each project's build-relevant files - reuses the items already fetched above.
-    let projectFiles = FileResolution.resolveAllFiles getItemsCached projects
-
-    // Step 3: locate the solution, then resolve implicit repo-level files up to it.
+    // Step 3's solution discovery runs before step 2 because it needs no MSBuild evaluation (just
+    // a walk up from the project directory) and step 2 needs its result: the solution root is the
+    // ceiling that bounds MSBuild's ancestor-globbed items, .editorconfig above all - see
+    // FileResolution.ancestorGlobbedItemTypes.
     let solutionRoot =
         SolutionDiscovery.resolveSolutionRoot
             SolutionDiscoveryIo.solutionFilesOnDisk
@@ -54,6 +59,15 @@ let isolate (options: IsolateOptions) : IsolateResult =
 
     let ceiling = solutionRoot |> Option.map (fun r -> r.Directory)
 
+    // Step 2: each project's build-relevant files - reuses the items already fetched above.
+    let resolvers =
+        { FileResolutionIo.resolvers ceiling with
+            GetItems = getItemsCached
+            GetProperties = getPropertiesCached }
+
+    let projectFiles = FileResolution.resolveAllFiles resolvers projects
+
+    // Step 3 (continued): the implicit repo-level files, up to the same ceiling.
     let implicitFiles =
         ImplicitFiles.resolveForProjects ImplicitFilesIo.filesOnDisk ceiling projectDirs
 
