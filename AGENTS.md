@@ -42,8 +42,15 @@ The traps that have actually bitten, each found only after CI went red:
   platform-native path. `PathHelpersTests.fs` is a tripwire for the helper itself.
 - **Don't assert on path *strings*.** Compare against a path built the same way, or assert on
   `Path.GetFileName`, so separators and drive letters can't make the assertion platform-specific.
-- **Line endings.** `.sln` files are CRLF; the fixtures in `TestFixtures.writeSolution` write `\r\n`
-  explicitly for that reason.
+- **Line endings.** The repository is LF everywhere, enforced by `.gitattributes`
+  (`* text=auto eol=lf`) — don't let an edit reintroduce CRLF. Note the asymmetry: the `.sln` the
+  *tool generates* is deliberately CRLF (`SolutionFile.fs`), matching `dotnet sln add`, and
+  `TestFixtures.writeSolution` writes `\r\n` to mimic a real solution as input. Repository files and
+  generated output are separate concerns.
+- **Rewriting a file in Python silently converts CRLF to LF**, because text mode translates
+  newlines on both read and write. Use binary mode for any file whose line endings matter, and
+  check `git diff --stat` — a one-line edit reporting hundreds of changed lines means you rewrote
+  the whole file.
 - **macOS symlinks.** `/tmp` and `/var` are symlinks to `/private/...`, and .NET's path APIs are
   purely lexical while `getcwd(3)` is not. `TestFixtures.withTempDir` canonicalizes for this;
   don't bypass it.
