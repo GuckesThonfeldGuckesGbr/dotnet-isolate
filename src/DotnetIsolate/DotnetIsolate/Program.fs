@@ -7,6 +7,7 @@ type Arguments =
     | [<MainCommand; ExactlyOnce>] ProjectPath of path: string
     | [<AltCommandLine("-o")>] Output_Dir of dir: string
     | [<AltCommandLine("-s")>] Solution of path: string
+    | Clean
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -14,6 +15,7 @@ type Arguments =
             | ProjectPath _ -> "path to the .csproj/.fsproj file to isolate"
             | Output_Dir _ -> "output directory (default: ./<ProjectName>)"
             | Solution _ -> "solution file to use, overriding auto-discovery (FR-8)"
+            | Clean -> "delete and recreate the output directory instead of merging into it"
 
 let private describeSolutionSource (source: SolutionDiscovery.SolutionRootSource) =
     match source with
@@ -29,9 +31,11 @@ let main argv =
 
         let result =
             Pipeline.isolate
-                { ProjectPath = results.GetResult(ProjectPath)
+                { ProjectPaths = [ results.GetResult(ProjectPath) ]
                   OutputDir = results.TryGetResult(Output_Dir)
-                  SolutionPath = results.TryGetResult(Solution) }
+                  SolutionPath = results.TryGetResult(Solution)
+                  RestoreOnly = false
+                  Clean = results.Contains(Clean) }
 
         // FR-8: always report which solution was used, since more than one solution can
         // reference the same project and the choice isn't always obvious.
@@ -43,6 +47,13 @@ let main argv =
             $"Isolated {result.IncludedProjects.Length} project(s), {result.FileCount} file(s) into {result.OutputDir}"
 
         printfn $"Link strategy: {result.Strategy}"
+
+        for entry in result.ExcludedUnderOutput do
+            eprintfn $"warning: ignoring {entry}, which lives under the output directory"
+
+        for entry in result.StaleEntries do
+            eprintfn $"warning: {entry} was already in the output directory and was not produced by this run"
+
         0
     with
     | :? ArguParseException as ex ->

@@ -4,16 +4,26 @@ open System.Collections.Concurrent
 open System.IO
 
 type IsolateOptions =
-    { ProjectPath: string
+    { /// One or more entry projects; their dependency closures are unioned.
+      ProjectPaths: string list
       OutputDir: string option
-      SolutionPath: string option }
+      SolutionPath: string option
+      /// Emit only the files `dotnet restore` needs (see Phase.fs), rather than the full set.
+      RestoreOnly: bool
+      /// Delete and recreate the output directory first, instead of merging into it.
+      Clean: bool }
 
 type IsolateResult =
     { OutputDir: string
       IncludedProjects: string list
       FileCount: int
       SolutionRoot: SolutionDiscovery.SolutionRoot option
-      Strategy: LinkStrategy.Strategy }
+      Strategy: LinkStrategy.Strategy
+      /// Resolved inputs dropped because they live under the output directory - almost always a
+      /// previous run's output swept up by MSBuild's implicit globs.
+      ExcludedUnderOutput: string list
+      /// Entries already in the output directory that this run did not produce.
+      StaleEntries: string list }
 
 /// Runs the full pipeline described in DESIGN.md (steps 1-7) end to end: resolves the project
 /// graph and its files, locates the solution (FR-8) and implicit repo-level files, computes the
@@ -21,7 +31,9 @@ type IsolateResult =
 /// was found - generates a scoped copy of it. Returns enough to report what happened; console
 /// output (e.g. which solution was used, per FR-8) is the CLI's job, not this function's.
 let isolate (options: IsolateOptions) : IsolateResult =
-    let projectPath = Path.GetFullPath(options.ProjectPath)
+    // Tasks 7 and 9 give ProjectPaths (multi-project unions) and RestoreOnly their real
+    // behaviour; for now the first entry project is all that's consumed.
+    let projectPath = Path.GetFullPath(List.head options.ProjectPaths)
     let projectDir = Path.GetDirectoryName(projectPath)
 
     // Steps 1 & 2 both need MSBuild evaluation per project - ProjectReference to walk the graph,
@@ -73,6 +85,23 @@ let isolate (options: IsolateOptions) : IsolateResult =
 
     let allFiles = (projectFiles @ implicitFiles) |> List.distinct
 
+    // FR-6: output defaults to ./<ProjectName>, or an explicit -o/--output-dir path.
+    let outputDir =
+        match options.OutputDir with
+        | Some dir -> Path.GetFullPath(dir)
+        | None -> Path.GetFullPath(Path.GetFileNameWithoutExtension(projectPath))
+
+    // A previous run's output is indistinguishable from source to MSBuild's implicit globs, so
+    // drop anything under the output directory before it can inflate the mirror root or get
+    // placed inside itself.
+    let partition = OutputSafety.partitionInputs outputDir allFiles
+
+    match OutputSafety.validate outputDir partition with
+    | Error message -> failwith message
+    | Ok() -> ()
+
+    let allFiles = partition.Kept
+
     if List.isEmpty allFiles then
         failwith $"no build-relevant files were resolved for {projectPath}"
 
@@ -87,18 +116,12 @@ let isolate (options: IsolateOptions) : IsolateResult =
         | Some root -> root
         | None -> failwith "could not compute a mirror root"
 
-    // FR-6: output defaults to ./<ProjectName>, or an explicit -o/--output-dir path.
-    let outputDir =
-        match options.OutputDir with
-        | Some dir -> Path.GetFullPath(dir)
-        | None -> Path.GetFullPath(Path.GetFileNameWithoutExtension(projectPath))
-
     // Step 5: decide the link strategy once, via a real file already in the resolved set.
     let strategy = LinkStrategy.probe (List.head allFiles) outputDir
 
-    // Step 6: materialize the output folder. `clean = false` for now (Task 3 wires the stale-entry
-    // list this returns into the pipeline result and decides `clean` properly).
-    Materialize.materialize strategy false mirrorRoot outputDir allFiles |> ignore
+    // Step 6: materialize the output folder, capturing pre-existing entries this run didn't
+    // produce so the CLI can report them rather than silently deleting or ignoring them.
+    let staleEntries = Materialize.materialize strategy options.Clean mirrorRoot outputDir allFiles
 
     // Step 7: generate the scoped solution file, if a source solution was found.
     match solutionRoot with
@@ -125,4 +148,6 @@ let isolate (options: IsolateOptions) : IsolateResult =
       IncludedProjects = projects
       FileCount = allFiles.Length
       SolutionRoot = solutionRoot
-      Strategy = strategy }
+      Strategy = strategy
+      ExcludedUnderOutput = partition.ExcludedUnderOutput
+      StaleEntries = staleEntries }

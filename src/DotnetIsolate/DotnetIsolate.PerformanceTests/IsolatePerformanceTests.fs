@@ -31,9 +31,11 @@ let ``isolating a project out of OrchardCore's real 240+-project graph completes
 
         let result =
             Pipeline.isolate
-                { ProjectPath = targetProject
+                { ProjectPaths = [ targetProject ]
                   OutputDir = Some outputDir
-                  SolutionPath = None }
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
 
         stopwatch.Stop()
 

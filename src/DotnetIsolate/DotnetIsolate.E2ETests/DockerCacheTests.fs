@@ -85,9 +85,11 @@ let ``host-side pattern is cache-hit on rebuild after an unrelated change`` (use
 
     try
         Pipeline.isolate
-            { ProjectPath = Path.Combine(sourceDir, "ServiceA", "ServiceA.csproj")
+            { ProjectPaths = [ Path.Combine(sourceDir, "ServiceA", "ServiceA.csproj") ]
               OutputDir = Some outputDir1
-              SolutionPath = None }
+              SolutionPath = None
+              RestoreOnly = false
+              Clean = false }
         |> ignore
 
         let exitCode1, output1 = runDockerBuild useBuildKit outputDir1 hostSideDockerfile tag
@@ -96,9 +98,11 @@ let ``host-side pattern is cache-hit on rebuild after an unrelated change`` (use
         touchUnrelatedFile (Path.Combine(sourceDir, "ServiceB", "Program.cs"))
 
         Pipeline.isolate
-            { ProjectPath = Path.Combine(sourceDir, "ServiceA", "ServiceA.csproj")
+            { ProjectPaths = [ Path.Combine(sourceDir, "ServiceA", "ServiceA.csproj") ]
               OutputDir = Some outputDir2
-              SolutionPath = None }
+              SolutionPath = None
+              RestoreOnly = false
+              Clean = false }
         |> ignore
 
         // Sanity: we really did re-isolate into a fresh directory, not reuse the first one.

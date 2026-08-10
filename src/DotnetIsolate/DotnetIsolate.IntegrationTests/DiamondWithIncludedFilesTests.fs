@@ -34,9 +34,11 @@ let ``isolating ServiceA from the .sln fixture includes only its dependency clos
     withTempDir (fun outputDir ->
         let result =
             Pipeline.isolate
-                { ProjectPath = Path.Combine(slnFixtureRoot, "ServiceA", "ServiceA.csproj")
+                { ProjectPaths = [ Path.Combine(slnFixtureRoot, "ServiceA", "ServiceA.csproj") ]
                   OutputDir = Some outputDir
-                  SolutionPath = None }
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
 
         Assert.True(File.Exists(Path.Combine(outputDir, "ServiceA", "ServiceA.csproj")))
         Assert.True(File.Exists(Path.Combine(outputDir, "LogicA", "LogicA.csproj")))
@@ -71,9 +73,11 @@ let ``isolating ServiceB from the .sln fixture includes only its dependency clos
     withTempDir (fun outputDir ->
         let result =
             Pipeline.isolate
-                { ProjectPath = Path.Combine(slnFixtureRoot, "ServiceB", "ServiceB.csproj")
+                { ProjectPaths = [ Path.Combine(slnFixtureRoot, "ServiceB", "ServiceB.csproj") ]
                   OutputDir = Some outputDir
-                  SolutionPath = None }
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
 
         Assert.True(File.Exists(Path.Combine(outputDir, "ServiceB", "ServiceB.csproj")))
         Assert.True(File.Exists(Path.Combine(outputDir, "LogicB", "LogicB.csproj")))
@@ -106,9 +110,11 @@ let ``isolating ServiceA from the .slnx fixture includes only its dependency clo
     withTempDir (fun outputDir ->
         let result =
             Pipeline.isolate
-                { ProjectPath = Path.Combine(slnxFixtureRoot, "ServiceA", "ServiceA.csproj")
+                { ProjectPaths = [ Path.Combine(slnxFixtureRoot, "ServiceA", "ServiceA.csproj") ]
                   OutputDir = Some outputDir
-                  SolutionPath = None }
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
 
         Assert.True(File.Exists(Path.Combine(outputDir, "ServiceA", "ServiceA.csproj")))
         Assert.True(File.Exists(Path.Combine(outputDir, "LogicA", "LogicA.csproj")))
@@ -137,9 +143,11 @@ let ``isolating ServiceB from the .slnx fixture includes only its dependency clo
     withTempDir (fun outputDir ->
         let result =
             Pipeline.isolate
-                { ProjectPath = Path.Combine(slnxFixtureRoot, "ServiceB", "ServiceB.csproj")
+                { ProjectPaths = [ Path.Combine(slnxFixtureRoot, "ServiceB", "ServiceB.csproj") ]
                   OutputDir = Some outputDir
-                  SolutionPath = None }
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
 
         Assert.True(File.Exists(Path.Combine(outputDir, "ServiceB", "ServiceB.csproj")))
         Assert.True(File.Exists(Path.Combine(outputDir, "LogicB", "LogicB.csproj")))

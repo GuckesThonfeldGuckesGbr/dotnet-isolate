@@ -32,15 +32,19 @@ let ``isolate produces byte-identical output across two separate runs on the sam
         let secondOutput = Path.Combine(root, "output2")
 
         Pipeline.isolate
-            { ProjectPath = projectPath
+            { ProjectPaths = [ projectPath ]
               OutputDir = Some firstOutput
-              SolutionPath = None }
+              SolutionPath = None
+              RestoreOnly = false
+              Clean = false }
         |> ignore
 
         Pipeline.isolate
-            { ProjectPath = projectPath
+            { ProjectPaths = [ projectPath ]
               OutputDir = Some secondOutput
-              SolutionPath = None }
+              SolutionPath = None
+              RestoreOnly = false
+              Clean = false }
         |> ignore
 
         let firstSnapshot = snapshot firstOutput

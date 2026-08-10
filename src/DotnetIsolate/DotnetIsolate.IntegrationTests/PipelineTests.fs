@@ -27,9 +27,11 @@ let ``isolate produces a mirrored, buildable output for a diamond dependency gra
 
         let result =
             Pipeline.isolate
-                { ProjectPath = Path.Combine(root, "A", "A.fsproj")
+                { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
                   OutputDir = Some outputDir
-                  SolutionPath = None }
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
 
         // Every project's file made it into the mirrored tree.
         Assert.True(File.Exists(Path.Combine(outputDir, "A", "A.fsproj")))
@@ -70,9 +72,11 @@ let ``isolate uses an explicitly-provided solution path instead of auto-discover
 
         let result =
             Pipeline.isolate
-                { ProjectPath = Path.Combine(root, "A", "A.fsproj")
+                { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
                   OutputDir = Some(Path.Combine(root, "output"))
-                  SolutionPath = Some explicitSln }
+                  SolutionPath = Some explicitSln
+                  RestoreOnly = false
+                  Clean = false }
 
         Assert.True(result.SolutionRoot.IsSome)
         Assert.Equal(SolutionDiscovery.ExplicitlyProvided, result.SolutionRoot.Value.Source)
@@ -94,9 +98,11 @@ let ``isolate defaults the output directory to ./<ProjectName> when none is give
         let result =
             try
                 Pipeline.isolate
-                    { ProjectPath = Path.Combine(root, "src", "A", "A.fsproj")
+                    { ProjectPaths = [ Path.Combine(root, "src", "A", "A.fsproj") ]
                       OutputDir = None
-                      SolutionPath = None }
+                      SolutionPath = None
+                      RestoreOnly = false
+                      Clean = false }
             finally
                 Directory.SetCurrentDirectory(previousCwd)
 
@@ -159,9 +165,11 @@ let ``isolate copies analyzer inputs: the CodeAnalysisRuleSet file and Additiona
         let outputDir = Path.Combine(root, "output")
 
         Pipeline.isolate
-            { ProjectPath = Path.Combine(root, "A", "A.fsproj")
+            { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
               OutputDir = Some outputDir
-              SolutionPath = None }
+              SolutionPath = None
+              RestoreOnly = false
+              Clean = false }
         |> ignore
 
         Assert.True(File.Exists(Path.Combine(outputDir, "analysis.ruleset")), "the CodeAnalysisRuleSet file")
@@ -176,3 +184,100 @@ let ``isolate copies analyzer inputs: the CodeAnalysisRuleSet file and Additiona
             runDotnet outputDir [ "build"; outputSln; "-nodeReuse:false" ]
 
         Assert.True((exitCode = 0), $"dotnet build failed (exit {exitCode}):\n{stdout}\n{stderr}"))
+
+// The destructive reproduction: -o pointing at the solution root used to delete the whole source
+// tree and only then fail. It must now fail before touching anything.
+[<Fact>]
+let ``isolate refuses an output directory that contains every input, leaving the source intact`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        let ex =
+            Assert.ThrowsAny<exn>(fun () ->
+                Pipeline.isolate
+                    { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+                      OutputDir = Some root
+                      SolutionPath = None
+                      RestoreOnly = false
+                      Clean = false }
+                |> ignore)
+
+        Assert.Contains("output directory", ex.Message)
+        // The source tree must still be there - this is the data-loss regression guard.
+        Assert.True(File.Exists(Path.Combine(root, "A", "A.fsproj")))
+        Assert.True(File.Exists(Path.Combine(root, "Fixture.sln"))))
+
+// The re-ingestion reproduction: an output directory nested inside a project directory is swept
+// up by the SDK's default globs on the second run.
+//
+// The F# SDK (unlike C#'s) sets EnableDefaultCompileItems/EnableDefaultNoneItems to false, so
+// Compile/Content/None never auto-glob - verified directly against the pinned 8.0.x SDK. Its
+// EmbeddedResource default glob (**/*.resx) is still on, though, so a .resx is what actually
+// triggers the sweep-up here: materializing copies it into out/A/Resource.resx, and the second
+// run's default glob over A's directory tree picks that copy back up as a second EmbeddedResource
+// item, alongside the real one.
+[<Fact>]
+let ``isolate succeeds twice with an output directory nested inside a project directory`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        File.WriteAllText(Path.Combine(root, "A", "Resource.resx"), "<root></root>")
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        let outputDir = Path.Combine(root, "A", "out")
+
+        let options: Pipeline.IsolateOptions =
+            { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+              OutputDir = Some outputDir
+              SolutionPath = None
+              RestoreOnly = false
+              Clean = false }
+
+        Pipeline.isolate options |> ignore
+        let second = Pipeline.isolate options
+
+        Assert.True(File.Exists(Path.Combine(outputDir, "A", "A.fsproj")))
+        // Nothing was placed inside itself a second level down.
+        Assert.False(Directory.Exists(Path.Combine(outputDir, "A", "out")))
+        Assert.NotEmpty(second.ExcludedUnderOutput))
+
+[<Fact>]
+let ``isolate reports pre-existing output entries as stale rather than deleting them`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        let outputDir = Path.Combine(root, "output")
+        Directory.CreateDirectory(outputDir) |> ignore
+        File.WriteAllText(Path.Combine(outputDir, "leftover.txt"), "previous run")
+
+        let result =
+            Pipeline.isolate
+                { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+                  OutputDir = Some outputDir
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
+
+        Assert.True(File.Exists(Path.Combine(outputDir, "leftover.txt")))
+        Assert.Contains(result.StaleEntries, fun e -> Path.GetFileName(e) = "leftover.txt"))
+
+[<Fact>]
+let ``isolate with Clean removes pre-existing output entries`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        let outputDir = Path.Combine(root, "output")
+        Directory.CreateDirectory(outputDir) |> ignore
+        File.WriteAllText(Path.Combine(outputDir, "leftover.txt"), "previous run")
+
+        Pipeline.isolate
+            { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+              OutputDir = Some outputDir
+              SolutionPath = None
+              RestoreOnly = false
+              Clean = true }
+        |> ignore
+
+        Assert.False(File.Exists(Path.Combine(outputDir, "leftover.txt"))))

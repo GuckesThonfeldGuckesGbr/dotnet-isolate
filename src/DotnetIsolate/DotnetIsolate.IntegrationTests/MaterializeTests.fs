@@ -22,7 +22,7 @@ let ``materialize mirrors nested relative paths and file content`` () =
             [ Path.Combine(mirrorRoot, "A", "A.fsproj")
               Path.Combine(mirrorRoot, "src", "Common", "Common.fsproj") ]
 
-        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot files
+        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot files |> ignore
 
         Assert.Equal("A project", File.ReadAllText(Path.Combine(outputRoot, "A", "A.fsproj")))
 
@@ -39,7 +39,7 @@ let ``materialize hardlinks rather than copies when the strategy says Hardlink``
         let source = Path.Combine(mirrorRoot, "A.fsproj")
         writeFile source "original"
 
-        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot [ source ]
+        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot [ source ] |> ignore
 
         // Same underlying data as the source - writing through the output path is visible via
         // the source. A copy would not reflect this.

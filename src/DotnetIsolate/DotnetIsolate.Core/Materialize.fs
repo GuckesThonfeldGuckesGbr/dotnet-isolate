@@ -15,6 +15,13 @@ let placeFile (strategy: LinkStrategy.Strategy) (mirrorRoot: string) (outputRoot
 
     match strategy with
     | LinkStrategy.Hardlink ->
+        // Unlike File.Copy, creating a hardlink at a path that already has an entry fails
+        // (EEXIST) rather than replacing it. Now that merging into an existing output directory
+        // is the default (Task 3), re-running over the same output hits this on every file the
+        // previous run already placed, so the existing entry has to be removed first.
+        if File.Exists(destination) then
+            File.Delete(destination)
+
         match Hardlink.create sourceFile destination with
         | Ok () -> ()
         | Error code ->
