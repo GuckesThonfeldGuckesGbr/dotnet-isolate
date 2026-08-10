@@ -54,6 +54,9 @@ let main argv =
         for entry in result.StaleEntries do
             eprintfn $"warning: {entry} was already in the output directory and was not produced by this run"
 
+        for entry in result.MissingFiles do
+            eprintfn $"warning: {entry} is referenced by a project but does not exist; skipped"
+
         0
     with
     | :? ArguParseException as ex ->

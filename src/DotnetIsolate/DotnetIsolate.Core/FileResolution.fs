@@ -93,11 +93,25 @@ let resolvePropertyFiles (fileExists: string -> bool) (properties: Map<string, s
     |> List.map (fun value -> Path.GetFullPath(value, projectDir))
     |> List.filter fileExists
 
+/// A project's resolved files, plus the item-derived paths that were dropped because nothing is
+/// there on disk.
+type ResolvedFiles =
+    { Files: string list
+      /// Item-derived paths that do not exist. Worth reporting: an item was authored by someone,
+      /// so its absence is a fact about the tree the user may want to know - as when a
+      /// `<None Include="..\.dockerignore"/>` target is excluded from the Docker build context.
+      MissingItemFiles: string list }
+
 /// Resolves the deduplicated, flat set of build-relevant file paths for a single project (FR-4,
 /// FR-9) - including the project file itself, which `dotnet msbuild -getItem` never returns (a
 /// .fsproj/.csproj isn't a Compile/Content/None/... item of itself), but which is obviously needed
 /// to build the isolated output at all.
-let resolveFiles (resolvers: Resolvers) (projectPath: string) : string list =
+///
+/// Item-derived paths are existence-checked, because MSBuild resolves items without consulting the
+/// disk: a perfectly ordinary project can name a file that isn't there, and copying it would fail
+/// the whole run. Dropping it here also keeps it out of the mirror-root computation, so an absent
+/// `..\.dockerignore` no longer adds a level to every path in the output.
+let resolveFiles (resolvers: Resolvers) (projectPath: string) : ResolvedFiles =
     let items = resolvers.GetItems projectPath
 
     let withinCeiling =
@@ -107,13 +121,21 @@ let resolveFiles (resolvers: Resolvers) (projectPath: string) : string list =
 
     let ancestorGlobbedFiles = itemsOfTypes ancestorGlobbedItemTypes items |> withinCeiling
 
+    let itemFiles =
+        (itemsOfTypes fileItemTypes items @ ancestorGlobbedFiles) |> List.distinct
+
+    let presentItemFiles, missingItemFiles = itemFiles |> List.partition resolvers.FileExists
+
     let propertyFiles =
         resolvePropertyFiles resolvers.FileExists (resolvers.GetProperties projectPath) projectPath
 
-    projectPath :: (itemsOfTypes fileItemTypes items @ ancestorGlobbedFiles @ propertyFiles)
-    |> List.distinct
+    { Files = projectPath :: (presentItemFiles @ propertyFiles) |> List.distinct
+      MissingItemFiles = missingItemFiles }
 
 /// Resolves the deduplicated, flat set of build-relevant file paths across every project in
 /// `projects` (pipeline step 2 in DESIGN.md) - e.g. the full set returned by ProjectGraph.resolve.
-let resolveAllFiles (resolvers: Resolvers) (projects: string list) : string list =
-    projects |> List.collect (resolveFiles resolvers) |> List.distinct
+let resolveAllFiles (resolvers: Resolvers) (projects: string list) : ResolvedFiles =
+    let resolved = projects |> List.map (resolveFiles resolvers)
+
+    { Files = resolved |> List.collect (fun r -> r.Files) |> List.distinct
+      MissingItemFiles = resolved |> List.collect (fun r -> r.MissingItemFiles) |> List.distinct }

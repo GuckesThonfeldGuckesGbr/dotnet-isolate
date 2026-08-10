@@ -23,7 +23,11 @@ type IsolateResult =
       /// previous run's output swept up by MSBuild's implicit globs.
       ExcludedUnderOutput: string list
       /// Entries already in the output directory that this run did not produce.
-      StaleEntries: string list }
+      StaleEntries: string list
+      /// Item-derived paths referenced by a project that do not exist on disk, dropped rather than
+      /// failing the run - e.g. a `<None Include="..\.dockerignore"/>` whose target was itself
+      /// excluded from the Docker build context.
+      MissingFiles: string list }
 
 /// Runs the full pipeline described in DESIGN.md (steps 1-7) end to end: resolves the project
 /// graph and its files, locates the solution (FR-8) and implicit repo-level files, computes the
@@ -77,7 +81,8 @@ let isolate (options: IsolateOptions) : IsolateResult =
             GetItems = getItemsCached
             GetProperties = getPropertiesCached }
 
-    let projectFiles = FileResolution.resolveAllFiles resolvers projects
+    let resolvedProjectFiles = FileResolution.resolveAllFiles resolvers projects
+    let projectFiles = resolvedProjectFiles.Files
 
     // Step 3 (continued): the implicit repo-level files, up to the same ceiling.
     let implicitFiles =
@@ -154,4 +159,5 @@ let isolate (options: IsolateOptions) : IsolateResult =
       SolutionRoot = solutionRoot
       Strategy = strategy
       ExcludedUnderOutput = partition.ExcludedUnderOutput
-      StaleEntries = staleEntries }
+      StaleEntries = staleEntries
+      MissingFiles = resolvedProjectFiles.MissingItemFiles }

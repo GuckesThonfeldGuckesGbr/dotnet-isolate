@@ -14,7 +14,7 @@ let ``resolveFiles picks up Compile and Content items plus the project file via 
         let result =
             FileResolution.resolveFiles (FileResolutionIo.resolvers None) projectPath
 
-        let fileNames = result |> List.map Path.GetFileName |> Set.ofList
+        let fileNames = result.Files |> List.map Path.GetFileName |> Set.ofList
 
         Assert.Equal<Set<string>>(Set [ "A.fsproj"; "Program.fs"; "appsettings.json" ], fileNames))
 
@@ -32,14 +32,14 @@ let ``resolveAllFiles aggregates real files, including project files, across a p
         let result =
             FileResolution.resolveAllFiles (FileResolutionIo.resolvers None) projects
 
-        let fileNames = result |> List.map Path.GetFileName |> Set.ofList
+        let fileNames = result.Files |> List.map Path.GetFileName |> Set.ofList
 
         Assert.Equal<Set<string>>(
             Set [ "A.fsproj"; "B.fsproj"; "Program.fs"; "appsettings.json" ],
             fileNames
         )
         // Program.fs exists in both A and B - confirm it wasn't silently collapsed to one entry.
-        Assert.Equal(5, result.Length))
+        Assert.Equal(5, result.Files.Length))
 
 [<Fact>]
 let ``resolveFiles picks up analyzer inputs: AdditionalFiles items and the CodeAnalysisRuleSet property`` () =
@@ -73,7 +73,7 @@ let ``resolveFiles picks up analyzer inputs: AdditionalFiles items and the CodeA
                 (FileResolutionIo.resolvers None)
                 (Path.Combine(projectDir, "A.fsproj"))
 
-        let fileNames = result |> List.map Path.GetFileName |> Set.ofList
+        let fileNames = result.Files |> List.map Path.GetFileName |> Set.ofList
 
         Assert.Equal<Set<string>>(
             Set [ "A.fsproj"; "Program.fs"; "stylecop.json"; "analysis.ruleset" ],
@@ -82,7 +82,7 @@ let ``resolveFiles picks up analyzer inputs: AdditionalFiles items and the CodeA
 
         // The ruleset path is relative to the project, so it must come back resolved against the
         // project directory - not the process's working directory.
-        Assert.Contains(Path.Combine(root, "analysis.ruleset"), result))
+        Assert.Contains(Path.Combine(root, "analysis.ruleset"), result.Files))
 
 /// Real-MSBuild proof of why `ancestorGlobbedItemTypes` needs a ceiling: the SDK's
 /// `EditorConfigFiles` walk climbs past the solution root, so it resolves a `.editorconfig` that
@@ -122,14 +122,14 @@ let ``resolveFiles bounds EditorConfigFiles by the ceiling while keeping nested 
 
         // Unbounded, MSBuild really does hand back the stray one from above the repo.
         let unbounded = FileResolution.resolveFiles (FileResolutionIo.resolvers None) projectPath
-        Assert.Contains(Path.Combine(outer, ".editorconfig"), unbounded)
+        Assert.Contains(Path.Combine(outer, ".editorconfig"), unbounded.Files)
 
         // Bounded by the solution root, only the in-repo ones survive - including the nested one.
         let bounded = FileResolution.resolveFiles (FileResolutionIo.resolvers (Some repo)) projectPath
 
-        Assert.Contains(Path.Combine(repo, ".editorconfig"), bounded)
-        Assert.Contains(Path.Combine(nestedDir, ".editorconfig"), bounded)
-        Assert.DoesNotContain(Path.Combine(outer, ".editorconfig"), bounded))
+        Assert.Contains(Path.Combine(repo, ".editorconfig"), bounded.Files)
+        Assert.Contains(Path.Combine(nestedDir, ".editorconfig"), bounded.Files)
+        Assert.DoesNotContain(Path.Combine(outer, ".editorconfig"), bounded.Files))
 
 /// FR-9 across the whole property list, via real MSBuild evaluation rather than a stub map.
 [<Fact>]
@@ -162,8 +162,8 @@ let ``resolveFiles picks up every file-path property, and skips ones pointing at
         let result =
             FileResolution.resolveFiles (FileResolutionIo.resolvers None) (Path.Combine(projectDir, "A.fsproj"))
 
-        Assert.Contains(Path.Combine(root, "sign.snk"), result)
-        Assert.Contains(Path.Combine(projectDir, "assets", "app.ico"), result)
-        Assert.Contains(Path.Combine(projectDir, "app.manifest"), result)
+        Assert.Contains(Path.Combine(root, "sign.snk"), result.Files)
+        Assert.Contains(Path.Combine(projectDir, "assets", "app.ico"), result.Files)
+        Assert.Contains(Path.Combine(projectDir, "app.manifest"), result.Files)
         // Set, but there is no such file - dropped rather than failing materialization later.
-        Assert.DoesNotContain(Path.Combine(projectDir, "never-written.res"), result))
+        Assert.DoesNotContain(Path.Combine(projectDir, "never-written.res"), result.Files))

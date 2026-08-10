@@ -22,7 +22,7 @@ let private withProperties (projects: Map<string, Map<string, string>>) =
 let ``resolveFiles includes the project file itself, since -getItem never returns it`` () =
     let result = resolveFiles stub "A/A.fsproj"
 
-    Assert.Equal<string list>([ "A/A.fsproj" ], result)
+    Assert.Equal<string list>([ "A/A.fsproj" ], result.Files)
 
 [<Fact>]
 let ``resolveFiles flattens every item type plus the project file into one deduplicated list`` () =
@@ -37,7 +37,7 @@ let ``resolveFiles flattens every item type plus the project file into one dedup
 
     Assert.Equal<Set<string>>(
         Set [ "A/A.fsproj"; "A/Program.fs"; "A/Lib.fs"; "A/appsettings.json" ],
-        Set result
+        Set result.Files
     )
 
 [<Fact>]
@@ -47,7 +47,7 @@ let ``resolveFiles dedups a file that appears under more than one item type`` ()
 
     let result = resolveFiles resolvers "A/A.fsproj"
 
-    Assert.Equal<string list>([ "A/A.fsproj"; "A/Program.fs" ], result)
+    Assert.Equal<string list>([ "A/A.fsproj"; "A/Program.fs" ], result.Files)
 
 [<Fact>]
 let ``resolveAllFiles aggregates and dedups files, including each project file, across multiple projects`` () =
@@ -69,7 +69,7 @@ let ``resolveAllFiles aggregates and dedups files, including each project file, 
               "B/Program.fs"
               "C/C.fsproj"
               "Shared/settings.json" ],
-        Set result
+        Set result.Files
     )
 
 /// Each entry in `fileItemTypes` earns its place by being a real compiler/build input, so none of
@@ -87,7 +87,7 @@ let ``resolveFiles includes every declared file item type, ceiling notwithstandi
 
     Assert.Equal<Set<string>>(
         Set("A/A.fsproj" :: (fileItemTypes |> List.map (fun t -> $"Outside/{t}.file"))),
-        Set result
+        Set result.Files
     )
 
 [<Fact>]
@@ -96,7 +96,7 @@ let ``resolveFiles includes AdditionalFiles, which is how analyzer config like s
 
     let result = resolveFiles resolvers "A/A.fsproj"
 
-    Assert.Equal<Set<string>>(Set [ "A/A.fsproj"; "A/stylecop.json" ], Set result)
+    Assert.Equal<Set<string>>(Set [ "A/A.fsproj"; "A/stylecop.json" ], Set result.Files)
 
 [<Fact>]
 let ``resolveFiles keeps ancestor-globbed files that sit at or below the ceiling`` () =
@@ -110,7 +110,7 @@ let ``resolveFiles keeps ancestor-globbed files that sit at or below the ceiling
 
     let result = resolveFiles resolvers projectPath
 
-    Assert.Equal<Set<string>>(Set [ projectPath; atCeiling; nested ], Set result)
+    Assert.Equal<Set<string>>(Set [ projectPath; atCeiling; nested ], Set result.Files)
 
 /// The reason ancestor-globbed items are bounded at all: MSBuild's `.editorconfig` walk doesn't
 /// stop at the repo, so a stray one in the user's home directory would otherwise be copied in -
@@ -127,7 +127,7 @@ let ``resolveFiles drops ancestor-globbed files from above the ceiling`` () =
 
     let result = resolveFiles resolvers projectPath
 
-    Assert.Equal<Set<string>>(Set [ projectPath; inRepo ], Set result)
+    Assert.Equal<Set<string>>(Set [ projectPath; inRepo ], Set result.Files)
 
 /// A sibling directory whose name merely starts with the ceiling's is not below the ceiling.
 [<Fact>]
@@ -141,7 +141,7 @@ let ``resolveFiles compares the ceiling by path segment, not by string prefix`` 
 
     let result = resolveFiles resolvers projectPath
 
-    Assert.Equal<string list>([ projectPath ], result)
+    Assert.Equal<string list>([ projectPath ], result.Files)
 
 /// No solution found (FR-8) means no ceiling, so nothing bounds the walk.
 [<Fact>]
@@ -153,7 +153,7 @@ let ``resolveFiles keeps every ancestor-globbed file when there is no ceiling`` 
 
     let result = resolveFiles resolvers projectPath
 
-    Assert.Equal<Set<string>>(Set [ projectPath; far ], Set result)
+    Assert.Equal<Set<string>>(Set [ projectPath; far ], Set result.Files)
 
 [<Fact>]
 let ``resolveFiles resolves a relative CodeAnalysisRuleSet against the project directory`` () =
@@ -166,7 +166,7 @@ let ``resolveFiles resolves a relative CodeAnalysisRuleSet against the project d
 
     Assert.Equal<Set<string>>(
         Set [ projectPath; PathHelpers.path [ "repo"; "analysis.ruleset" ] ],
-        Set result
+        Set result.Files
     )
 
 [<Fact>]
@@ -177,7 +177,7 @@ let ``resolveFiles keeps an already-absolute CodeAnalysisRuleSet as-is`` () =
 
     let result = resolveFiles resolvers projectPath
 
-    Assert.Equal<Set<string>>(Set [ projectPath; ruleSet ], Set result)
+    Assert.Equal<Set<string>>(Set [ projectPath; ruleSet ], Set result.Files)
 
 [<Fact>]
 let ``resolveFiles ignores an unset CodeAnalysisRuleSet, which MSBuild reports as an empty string`` () =
@@ -186,7 +186,7 @@ let ``resolveFiles ignores an unset CodeAnalysisRuleSet, which MSBuild reports a
 
     let result = resolveFiles resolvers projectPath
 
-    Assert.Equal<string list>([ projectPath ], result)
+    Assert.Equal<string list>([ projectPath ], result.Files)
 
 /// Every file-path property is resolved, not just the first one that happens to be set.
 [<Fact>]
@@ -203,7 +203,7 @@ let ``resolveFiles resolves each declared file-path property`` () =
         filePathPropertyNames
         |> List.map (fun name -> PathHelpers.path [ "repo"; "A"; "assets"; $"{name}.file" ])
 
-    Assert.Equal<Set<string>>(Set(projectPath :: expected), Set result)
+    Assert.Equal<Set<string>>(Set(projectPath :: expected), Set result.Files)
 
 /// An SDK is free to default a path property to something that was never meant to be read, so a
 /// property value pointing at nothing is skipped rather than failing the whole run downstream.
@@ -222,7 +222,7 @@ let ``resolveFiles drops a file-path property whose target does not exist`` () =
 
     let result = resolveFiles resolvers projectPath
 
-    Assert.Equal<Set<string>>(Set [ projectPath; real ], Set result)
+    Assert.Equal<Set<string>>(Set [ projectPath; real ], Set result.Files)
 
 [<Fact>]
 let ``resolveAllFiles dedups one shared ruleset referenced by several projects`` () =
@@ -239,5 +239,78 @@ let ``resolveAllFiles dedups one shared ruleset referenced by several projects``
 
     let result = resolveAllFiles resolvers [ projectA; projectB ]
 
-    Assert.Equal<Set<string>>(Set [ projectA; projectB; ruleSet ], Set result)
-    Assert.Equal(1, result |> List.filter (fun f -> f = ruleSet) |> List.length)
+    Assert.Equal<Set<string>>(Set [ projectA; projectB; ruleSet ], Set result.Files)
+    Assert.Equal(1, result.Files |> List.filter (fun f -> f = ruleSet) |> List.length)
+
+// The .dockerignore reproduction: a <None Include="..\.dockerignore"/> whose target was itself
+// excluded from the Docker build context. MSBuild reports the item regardless - item resolution
+// never consults the disk - and materialization then died copying a file that isn't there.
+[<Fact>]
+let ``resolveFiles drops a missing item-derived file and reports it`` () =
+    let projectPath = PathHelpers.path [ "repo"; "A"; "A.fsproj" ]
+    let present = PathHelpers.path [ "repo"; "A"; "Program.fs" ]
+    let missing = PathHelpers.path [ "repo"; ".dockerignore" ]
+
+    let resolvers =
+        { GetItems = fun _ -> Map.ofList [ "Compile", [ present ]; "None", [ missing ] ]
+          GetProperties = fun _ -> Map.empty
+          FileExists = fun p -> p <> missing
+          AncestorCeiling = None }
+
+    let result = resolveFiles resolvers projectPath
+
+    Assert.Contains(present, result.Files)
+    Assert.DoesNotContain(missing, result.Files)
+    Assert.Equal<string list>([ missing ], result.MissingItemFiles)
+
+// The project file itself is never existence-checked: MSBuild just evaluated it.
+[<Fact>]
+let ``resolveFiles always includes the project file`` () =
+    let projectPath = PathHelpers.path [ "repo"; "A"; "A.fsproj" ]
+
+    let resolvers =
+        { GetItems = fun _ -> Map.empty
+          GetProperties = fun _ -> Map.empty
+          FileExists = fun _ -> false
+          AncestorCeiling = None }
+
+    let result = resolveFiles resolvers projectPath
+
+    Assert.Contains(projectPath, result.Files)
+
+// Property paths are scalars the SDK routinely defaults to paths never meant to exist, so they
+// are dropped silently - warning on them would be noise on projects that build fine.
+[<Fact>]
+let ``resolveFiles drops a missing property-derived file without reporting it`` () =
+    let projectPath = PathHelpers.path [ "repo"; "A"; "A.fsproj" ]
+    let missingRuleset = PathHelpers.path [ "repo"; "A"; "analysis.ruleset" ]
+
+    let resolvers =
+        { GetItems = fun _ -> Map.empty
+          GetProperties = fun _ -> Map.ofList [ "CodeAnalysisRuleSet", "analysis.ruleset" ]
+          FileExists = fun _ -> false
+          AncestorCeiling = None }
+
+    let result = resolveFiles resolvers projectPath
+
+    Assert.DoesNotContain(missingRuleset, result.Files)
+    Assert.Empty(result.MissingItemFiles)
+
+[<Fact>]
+let ``resolveAllFiles unions files and missing reports across projects`` () =
+    let projectA = PathHelpers.path [ "repo"; "A"; "A.fsproj" ]
+    let projectB = PathHelpers.path [ "repo"; "B"; "B.fsproj" ]
+    let missing = PathHelpers.path [ "repo"; ".dockerignore" ]
+
+    let resolvers =
+        { GetItems = fun _ -> Map.ofList [ "None", [ missing ] ]
+          GetProperties = fun _ -> Map.empty
+          FileExists = fun p -> p <> missing
+          AncestorCeiling = None }
+
+    let result = resolveAllFiles resolvers [ projectA; projectB ]
+
+    Assert.Contains(projectA, result.Files)
+    Assert.Contains(projectB, result.Files)
+    // Deduplicated: both projects reported the same missing file.
+    Assert.Equal<string list>([ missing ], result.MissingItemFiles)

@@ -281,3 +281,28 @@ let ``isolate with Clean removes pre-existing output entries`` () =
         |> ignore
 
         Assert.False(File.Exists(Path.Combine(outputDir, "leftover.txt"))))
+
+[<Fact>]
+let ``isolate warns about a referenced file that does not exist instead of failing`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        // Reference a file that is never created - the .dockerignore reproduction.
+        let projectFile = Path.Combine(root, "A", "A.fsproj")
+        let content = File.ReadAllText(projectFile)
+
+        File.WriteAllText(
+            projectFile,
+            content.Replace("</Project>", "<ItemGroup><None Include=\"absent.txt\"/></ItemGroup></Project>")
+        )
+
+        let result =
+            Pipeline.isolate
+                { ProjectPaths = [ projectFile ]
+                  OutputDir = Some(Path.Combine(root, "output"))
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
+
+        Assert.Contains(result.MissingFiles, fun f -> Path.GetFileName(f) = "absent.txt"))
