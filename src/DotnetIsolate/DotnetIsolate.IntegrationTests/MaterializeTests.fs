@@ -22,7 +22,7 @@ let ``materialize mirrors nested relative paths and file content`` () =
             [ Path.Combine(mirrorRoot, "A", "A.fsproj")
               Path.Combine(mirrorRoot, "src", "Common", "Common.fsproj") ]
 
-        Materialize.materialize LinkStrategy.Hardlink mirrorRoot outputRoot files
+        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot files
 
         Assert.Equal("A project", File.ReadAllText(Path.Combine(outputRoot, "A", "A.fsproj")))
 
@@ -39,22 +39,57 @@ let ``materialize hardlinks rather than copies when the strategy says Hardlink``
         let source = Path.Combine(mirrorRoot, "A.fsproj")
         writeFile source "original"
 
-        Materialize.materialize LinkStrategy.Hardlink mirrorRoot outputRoot [ source ]
+        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot [ source ]
 
         // Same underlying data as the source - writing through the output path is visible via
         // the source. A copy would not reflect this.
         File.WriteAllText(Path.Combine(outputRoot, "A.fsproj"), "changed via output")
         Assert.Equal("changed via output", File.ReadAllText(source)))
 
+// Supersedes the old FR-7 delete-and-recreate default: an unrelated pre-existing file survives,
+// because the destructive default could (and did) delete a user's source tree.
 [<Fact>]
-let ``materialize deletes and recreates a pre-existing output folder (FR-7)`` () =
+let ``materialize preserves pre-existing output content and reports it as stale`` () =
     withTempDir (fun root ->
         let mirrorRoot = Path.Combine(root, "mirror")
         let outputRoot = Path.Combine(root, "output")
         writeFile (Path.Combine(mirrorRoot, "A.fsproj")) "current"
         writeFile (Path.Combine(outputRoot, "stale-leftover.txt")) "from a previous run"
 
-        Materialize.materialize LinkStrategy.Copy mirrorRoot outputRoot [ Path.Combine(mirrorRoot, "A.fsproj") ]
+        let stale =
+            Materialize.materialize LinkStrategy.Copy false mirrorRoot outputRoot [ Path.Combine(mirrorRoot, "A.fsproj") ]
+
+        Assert.True(File.Exists(Path.Combine(outputRoot, "stale-leftover.txt")))
+        Assert.True(File.Exists(Path.Combine(outputRoot, "A.fsproj")))
+        Assert.Equal(1, stale.Length)
+        Assert.Equal("stale-leftover.txt", Path.GetFileName(List.head stale)))
+
+[<Fact>]
+let ``materialize does not report a file this run produced as stale`` () =
+    withTempDir (fun root ->
+        let mirrorRoot = Path.Combine(root, "mirror")
+        let outputRoot = Path.Combine(root, "output")
+        writeFile (Path.Combine(mirrorRoot, "A.fsproj")) "current"
+        // Same relative path this run will write, left over from a previous run.
+        writeFile (Path.Combine(outputRoot, "A.fsproj")) "previous"
+
+        let stale =
+            Materialize.materialize LinkStrategy.Copy false mirrorRoot outputRoot [ Path.Combine(mirrorRoot, "A.fsproj") ]
+
+        Assert.Empty(stale)
+        Assert.Equal("current", File.ReadAllText(Path.Combine(outputRoot, "A.fsproj"))))
+
+[<Fact>]
+let ``materialize with clean empties the output folder first`` () =
+    withTempDir (fun root ->
+        let mirrorRoot = Path.Combine(root, "mirror")
+        let outputRoot = Path.Combine(root, "output")
+        writeFile (Path.Combine(mirrorRoot, "A.fsproj")) "current"
+        writeFile (Path.Combine(outputRoot, "stale-leftover.txt")) "from a previous run"
+
+        let stale =
+            Materialize.materialize LinkStrategy.Copy true mirrorRoot outputRoot [ Path.Combine(mirrorRoot, "A.fsproj") ]
 
         Assert.False(File.Exists(Path.Combine(outputRoot, "stale-leftover.txt")))
-        Assert.True(File.Exists(Path.Combine(outputRoot, "A.fsproj"))))
+        Assert.True(File.Exists(Path.Combine(outputRoot, "A.fsproj")))
+        Assert.Empty(stale))

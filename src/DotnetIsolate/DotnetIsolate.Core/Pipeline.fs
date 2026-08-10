@@ -96,8 +96,9 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // Step 5: decide the link strategy once, via a real file already in the resolved set.
     let strategy = LinkStrategy.probe (List.head allFiles) outputDir
 
-    // Step 6: materialize the output folder (deletes/recreates per FR-7).
-    Materialize.materialize strategy mirrorRoot outputDir allFiles
+    // Step 6: materialize the output folder. `clean = false` for now (Task 3 wires the stale-entry
+    // list this returns into the pipeline result and decides `clean` properly).
+    Materialize.materialize strategy false mirrorRoot outputDir allFiles |> ignore
 
     // Step 7: generate the scoped solution file, if a source solution was found.
     match solutionRoot with

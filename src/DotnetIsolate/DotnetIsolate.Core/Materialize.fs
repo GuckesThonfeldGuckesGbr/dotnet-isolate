@@ -22,12 +22,38 @@ let placeFile (strategy: LinkStrategy.Strategy) (mirrorRoot: string) (outputRoot
                 $"Hardlink.create failed for {sourceFile} -> {destination} (error {code}) despite the strategy probe succeeding"
     | LinkStrategy.Copy -> File.Copy(sourceFile, destination, overwrite = true)
 
-/// Deletes `outputRoot` if it already exists and recreates it empty (FR-7), then places every
-/// file in `files` (absolute paths under `mirrorRoot`) at its mirrored relative location using
-/// `strategy` (pipeline step 6).
-let materialize (strategy: LinkStrategy.Strategy) (mirrorRoot: string) (outputRoot: string) (files: string list) =
-    if Directory.Exists(outputRoot) then
+/// Places every file in `files` (absolute paths under `mirrorRoot`) at its mirrored relative
+/// location under `outputRoot`, using `strategy` (pipeline step 6).
+///
+/// `clean` selects between the two output-directory policies. The default (`false`) merges into
+/// whatever is already there and returns the entries it found that this run did not produce, so
+/// the caller can warn about them; it never deletes. `true` restores the original
+/// delete-and-recreate behaviour for callers who need the output to contain exactly the isolated
+/// set. Merging is the default because the destructive one, applied to an output directory that
+/// overlapped the source tree, deleted the user's source before failing.
+let materialize
+    (strategy: LinkStrategy.Strategy)
+    (clean: bool)
+    (mirrorRoot: string)
+    (outputRoot: string)
+    (files: string list)
+    : string list =
+    if clean && Directory.Exists(outputRoot) then
         Directory.Delete(outputRoot, recursive = true)
+
+    // Snapshot before placing anything, so files this run writes are never mistaken for stale.
+    let preExisting =
+        if Directory.Exists(outputRoot) then
+            Directory.EnumerateFiles(outputRoot, "*", SearchOption.AllDirectories) |> Set.ofSeq
+        else
+            Set.empty
 
     Directory.CreateDirectory(outputRoot) |> ignore
     files |> List.iter (placeFile strategy mirrorRoot outputRoot)
+
+    let produced =
+        files
+        |> List.map (fun f -> Path.Combine(outputRoot, Path.GetRelativePath(mirrorRoot, f)))
+        |> Set.ofList
+
+    Set.difference preExisting produced |> Set.toList
