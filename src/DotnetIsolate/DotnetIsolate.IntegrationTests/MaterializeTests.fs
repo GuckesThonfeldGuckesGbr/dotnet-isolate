@@ -79,6 +79,24 @@ let ``materialize does not report a file this run produced as stale`` () =
         Assert.Empty(stale)
         Assert.Equal("current", File.ReadAllText(Path.Combine(outputRoot, "A.fsproj"))))
 
+// Regression guard for the Hardlink/EEXIST bug: creating a hardlink at a path that already has an
+// entry fails, unlike File.Copy(overwrite = true), so merging (the default since Task 3) into an
+// output directory the strategy already populated must remove the stale entry first. Only
+// LinkStrategy.probe decides Hardlink vs Copy for a real run, so this is the only place that
+// exercises the merge-over-hardlink path independent of the filesystem the tests happen to run on.
+[<Fact>]
+let ``materialize succeeds when re-run with Hardlink over its own prior output`` () =
+    withTempDir (fun root ->
+        let mirrorRoot = Path.Combine(root, "mirror")
+        let outputRoot = Path.Combine(root, "output")
+        let source = Path.Combine(mirrorRoot, "A.fsproj")
+        writeFile source "current"
+
+        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot [ source ] |> ignore
+        Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot [ source ] |> ignore
+
+        Assert.Equal("current", File.ReadAllText(Path.Combine(outputRoot, "A.fsproj"))))
+
 [<Fact>]
 let ``materialize with clean empties the output folder first`` () =
     withTempDir (fun root ->

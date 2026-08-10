@@ -19,7 +19,12 @@ let placeFile (strategy: LinkStrategy.Strategy) (mirrorRoot: string) (outputRoot
         // (EEXIST) rather than replacing it. Now that merging into an existing output directory
         // is the default (Task 3), re-running over the same output hits this on every file the
         // previous run already placed, so the existing entry has to be removed first.
-        if File.Exists(destination) then
+        //
+        // Guarded against destination = sourceFile: unreachable via Pipeline today (anything
+        // under outputDir is excluded by OutputSafety before materialize ever sees it), but
+        // placeFile is public, and without this a caller whose output and mirror roots overlap
+        // would have this delete their own source file out from under them.
+        if File.Exists(destination) && not (System.String.Equals(destination, sourceFile, System.StringComparison.OrdinalIgnoreCase)) then
             File.Delete(destination)
 
         match Hardlink.create sourceFile destination with

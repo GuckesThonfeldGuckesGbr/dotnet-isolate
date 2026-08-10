@@ -85,6 +85,13 @@ let isolate (options: IsolateOptions) : IsolateResult =
 
     let allFiles = (projectFiles @ implicitFiles) |> List.distinct
 
+    // Checked here, before the output-directory partition below, so this failure keeps reporting
+    // its own cause (nothing resolved at all) instead of being masked by OutputSafety.validate's
+    // "the output directory contains every resolved input file" - which is only true, and only the
+    // real problem, once there was something to partition in the first place.
+    if List.isEmpty allFiles then
+        failwith $"no build-relevant files were resolved for {projectPath}"
+
     // FR-6: output defaults to ./<ProjectName>, or an explicit -o/--output-dir path.
     let outputDir =
         match options.OutputDir with
@@ -101,9 +108,6 @@ let isolate (options: IsolateOptions) : IsolateResult =
     | Ok() -> ()
 
     let allFiles = partition.Kept
-
-    if List.isEmpty allFiles then
-        failwith $"no build-relevant files were resolved for {projectPath}"
 
     // Step 4: the mirror root - includes the solution root directory itself (see DESIGN.md) so
     // the generated solution file in step 7 always lands inside the output folder.
