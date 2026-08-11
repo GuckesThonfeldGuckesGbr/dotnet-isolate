@@ -93,11 +93,25 @@ let deleteIfExists (dir: string) =
     if Directory.Exists(dir) then
         Directory.Delete(dir, recursive = true)
 
-/// Appends a harmless comment to a file outside the isolated closure being built, to prove the
-/// early, uncacheable step (the "isolate"/COPY . /src stage) really does rerun between builds -
-/// without this, a cache-hit assertion on the downstream layers would be vacuous.
+/// Appends a harmless, uniquely-identified comment to a file, to prove the early, uncacheable step
+/// (the "isolate"/COPY . /src stage) really does rerun between builds - without this, a cache-hit
+/// assertion on the downstream layers would be vacuous.
+///
+/// The appended text embeds a fresh GUID rather than a fixed literal. BuildKit's build cache is
+/// content-addressed and shared across the whole daemon, not scoped to a single test or process:
+/// two builds anywhere that happen to produce byte-identical input trees will share a cache entry
+/// regardless of which invocation produced it first. A fixed literal made every run's "touched"
+/// state identical to every other run's, which cuts both ways and both are bad:
+///   - a false red: on a warm daemon, a *correct* build's "should rerun" sanity check can find a
+///     cache entry left by an earlier run's identical touch and wrongly appear still-cached.
+///   - a false green, which is worse: if a future regression made the restore half leak a source
+///     file, a warm daemon could satisfy `stepCached ... "dotnet restore"` from a cache entry a
+///     previous run of that same regression already populated with that same fixed literal - the
+///     assertion would pass by coincidence, masking the exact defect this suite exists to catch.
+/// A GUID makes every call's content unique, so no two runs - buggy or correct - can ever collide
+/// on a cache key, closing off both failure modes.
 let touchUnrelatedFile (path: string) =
-    File.AppendAllText(path, "\n// e2e: unrelated change\n")
+    File.AppendAllText(path, $"\n// e2e: unrelated change {Guid.NewGuid():N}\n")
 
 /// Packs `toolProjectPath` (this branch's own DotnetIsolate.fsproj) into `destNupkgDir`, so the
 /// self-contained Dockerfile pattern can `dotnet tool install` from a local nupkg instead of
