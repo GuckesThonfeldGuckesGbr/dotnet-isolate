@@ -23,6 +23,7 @@
         <Compile Include="MsBuild.fs"/>
         <Compile Include="FileResolution.fs"/>
         <Compile Include="FileResolutionIo.fs"/>
+        <Compile Include="Phase.fs"/>
         <Compile Include="Pipeline.fs"/>
     </ItemGroup>
 
