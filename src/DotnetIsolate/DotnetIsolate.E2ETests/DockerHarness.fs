@@ -65,6 +65,9 @@ let expensiveLayersCached (useBuildKit: bool) (output: string) =
 let stepNotCached (useBuildKit: bool) (output: string) (stepNeedle: string) =
     not (isStepCached useBuildKit output stepNeedle)
 
+/// True if the given step cache-hit. BuildKit only - the classic builder is no longer supported.
+let stepCached (output: string) (stepNeedle: string) = isStepCached true output stepNeedle
+
 /// Recursively copies `sourceDir` into a fresh, uniquely-named temp directory and returns its
 /// path, skipping bin/obj (build artifacts, not part of the fixture).
 let copyFixtureToTempDir (sourceDir: string) =
