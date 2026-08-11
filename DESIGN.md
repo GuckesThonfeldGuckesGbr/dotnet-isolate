@@ -6,17 +6,21 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
 ## Solution layout
 
 - **`DotnetIsolate.Core`** — the logic library: project graph discovery, file resolution,
-  link-strategy detection, output materialization. No console/CLI concerns live here, so it's
-  independently testable.
+  link-strategy detection, output materialization. Two of its modules are pure and exist to keep the
+  pipeline honest: `OutputSafety.fs` (partitioning the resolved inputs against the output directory
+  and rejecting an output directory that would consume them — FR-7) and `Phase.fs` (selecting the
+  restore subset — FR-11). No console/CLI concerns live here, so it's independently testable.
 - **`DotnetIsolate`** — the CLI entrypoint (Argu-based, QP-1), a thin wrapper over
   `DotnetIsolate.Core`.
 - **`DotnetIsolate.UnitTests`** — fast, isolated tests of `DotnetIsolate.Core`'s internals (QP-2,
   QP-5).
 - **`DotnetIsolate.IntegrationTests`** — exercises the whole tool end-to-end against a fixture
   solution on disk (QP-2, QP-3, QP-4).
-- **`DotnetIsolate.E2ETests`** — drives real `docker build` runs against the Dockerfile patterns in
-  DI-1 and asserts cache-hit behavior on a second run (QP-12). Requires a Docker daemon; not part
-  of the coverage gates.
+- **`DotnetIsolate.E2ETests`** — drives real `docker build` runs and asserts cache-hit behavior on a
+  second run (QP-12), including the documented DI-1 two-phase Dockerfile. Its other two fixtures
+  (`COPY . /src` self-contained, and host-side) are no longer documented patterns but are kept as
+  regression coverage of the `COPY --from` bridge itself. Requires a Docker daemon; not part of the
+  coverage gates.
 
 (Project/package names above are assumed for concreteness, not yet explicitly confirmed — see
 "Open questions" at the bottom.)
@@ -135,11 +139,30 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    under the destination root, and use the result to decide hardlink-or-copy for every file under
    that pair (REL-2). This is one deliberate upfront check per pair, not a try/catch wrapped around
    every file copy — and deliberately never writes anything into the source tree (the destination
-   is ours to manage per FR-7; the source is the user's actual solution).
+   is ours to manage; the source is the user's actual solution).
 
-6. **Materialize the output folder.** Delete the output folder if it already exists (FR-7),
-   recreate it, then place every resolved file at its mirrored relative path using the strategy
-   chosen in step 5.
+6. **Materialize the output folder.** Place every resolved file at its mirrored relative path using
+   the strategy chosen in step 5. Materialization no longer deletes anything: it merges over
+   whatever is already there and returns the entries it found that this run did not produce, which
+   the CLI reports (FR-7). `--clean` (FR-12) reinstates delete-and-recreate. One consequence worth
+   recording, because it only shows up on a second run: a hardlink at a path that already has an
+   entry fails with `EEXIST` rather than replacing it (unlike `File.Copy`), so the existing entry is
+   removed first — guarded against the destination being the source file itself.
+
+   Two things happen *before* this step and before the mirror root of step 4, not here, because both
+   have to precede any filesystem mutation: every resolved input under the output directory is
+   partitioned out of the input set (`OutputSafety.partitionInputs`), and the run fails outright if
+   that leaves nothing (`OutputSafety.validate`). The order is what makes them work. Pointing `-o` at
+   the solution root previously deleted the whole source tree and *then* failed; pointing it inside a
+   project directory previously succeeded once and failed on the second run, because the SDK's
+   default globs collected the first run's output as `Compile` items of the enclosing project and the
+   tool tried to place the output inside itself. Excluding those inputs before the mirror root is
+   computed also stops them dragging it outward.
+
+   When `--restore` is set, `Phase.restoreSubset` narrows the placed set to the restore inputs
+   (FR-11) *after* step 4 has computed the mirror root from the full set. Deriving the root from the
+   full set in both phases is what makes the two outputs overlay exactly, so a Dockerfile can `COPY`
+   the restore half, `RUN dotnet restore`, then `COPY` the full half straight over it.
 
 7. **Generate the scoped solution file** (skipped if step 3 found no solution root, per FR-8).
    Parse the source solution as a template, keep only the
@@ -148,6 +171,10 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    (`.sln` or `.slnx`) — into the output folder at the mirrored path the original solution file
    occupied (FR-3). This is what lets a bare `dotnet build`/`dotnet restore` at the output root work
    with no extra arguments.
+
+   This step runs in *both* phases, `--restore` included: the solution file is generated rather than
+   resolved, so it never appears in step 6's file set at all and `Phase.restoreSubset` has nothing to
+   select — while `dotnet restore` at the output root needs it.
 
    **Implementation status:** `SolutionFile.filterSln` (in `DotnetIsolate.Core`) implements this for
    classic `.sln` — parses the `Project(...)`...`EndProject` blocks and the `Global` section against
@@ -165,7 +192,7 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    `.slnx`-capable SDK to build, isolated or not — so the tool preserves the source format rather
    than silently downgrading it. It does mean: if your source solution is `.slnx`, whatever builds
    the isolated output (host SDK, or the SDK image tag in a Dockerfile) needs to support it too —
-   e.g. `sdk:10.0` rather than `sdk:8.0` in the patterns under DI-1. This repo's own solution file
+   e.g. `sdk:10.0` rather than `sdk:8.0` in the pattern under DI-1. This repo's own solution file
    was briefly `.slnx` during early scaffolding, hit this exact SDK 8 build failure locally, and was
    reverted to `.sln` — a case of the source solution's format choice, not a tool requirement.
 
@@ -203,7 +230,7 @@ framing undersold what NTFS can actually do, and OS-based branching would also m
 Linux/macOS output directory living on a different volume/filesystem (e.g. a FAT32 USB drive, a
 network mount) than the source.
 
-## Docker integration patterns (DI-1)
+## Docker integration pattern (DI-1)
 
 Within a single build *stage*, both classic Docker and BuildKit chain `RUN`/`COPY` cache keys off
 the previous instruction's result: `COPY <entire solution> .` hashes the whole copied tree, so
@@ -212,34 +239,49 @@ chained after it *in the same stage* (`RUN dotnet isolate ...`, `RUN dotnet rest
 cache as a consequence, regardless of REL-1's determinism guarantee about `dotnet isolate`'s own
 output.
 
-The mechanism that actually sidesteps this — and works under **any** builder, classic or BuildKit —
-is `COPY --from=<stage>` between build stages. Docker has always cached multi-stage `COPY --from`
-by checksumming the actual bytes being copied from the source stage, not by chaining off that
-stage's own (possibly cache-missed) layer history. So: run `dotnet isolate` in its own dedicated
-stage, and bridge into the stage that does the expensive work (`restore`/`build`/`publish`) with
-`COPY --from=isolate`. That copy — and everything chained after it — cache-hits whenever
-`dotnet isolate`'s output is unchanged (REL-1), *even under the classic builder*, because the
-`RUN dotnet isolate ...` step and everything before it being cache-missed doesn't matter anymore
-once the bridge is a content-checksummed `COPY --from`, not a same-stage chain.
+The mechanism that sidesteps this is `COPY --from=<stage>` between build stages. Docker caches a
+multi-stage `COPY --from` by checksumming the actual bytes being copied from the source stage, not by
+chaining off that stage's own (possibly cache-missed) layer history. So: run `dotnet isolate` in its
+own dedicated stage, and bridge into the stage that does the expensive work
+(`restore`/`build`/`publish`) with `COPY --from=isolate`. That copy — and everything chained after it
+— cache-hits whenever `dotnet isolate`'s output is unchanged (REL-1), because the
+`RUN dotnet isolate ...` step and everything before it being cache-missed stops mattering once the
+bridge is a content-checksummed `COPY --from` rather than a same-stage chain.
 
-(An earlier draft of this document claimed the self-contained pattern needed BuildKit's
-content-addressed dedup to work at all. That's wrong — the stage-split above gets the same result
-under the classic builder too, with nothing more exotic than `dotnet tool install` in its own
-stage. A dedicated `dotnet-isolate` Docker image was considered as a way to make that stage
-cheaper/more pinned, but was dropped: the `RUN dotnet tool install` step already sits *before* the
-uncacheable `COPY` of the solution, so it's cached across builds on its own, and the isolate stage
-can reuse the same SDK base image the build stage needs anyway — so a separate published image
-bought no caching benefit, only minor polish, for a maintenance cost not worth it right now.)
+**Verified: that checksum is mtime-insensitive.** Checked directly against buildx 0.36.0 / Docker
+29.7.1 rather than assumed — a stage was forced to rerun, one of its output files had its mtime moved
+to 2030 with its content unchanged, and a second file's content was changed. The `COPY --from` of the
+unchanged-content file was `CACHED`, as was the expensive `RUN` between the two `COPY`s; only the
+`COPY` of the changed file reran. This is load-bearing rather than incidental: the tool hardlinks
+where it can (REL-2), so output files inherit their source's mtime, and a fresh CI clone stamps every
+file with a new one. Had mtime counted, none of this would work and the restore split below would buy
+nothing.
 
-This is why two Dockerfile patterns are documented (DI-1):
+**The restore split.** `COPY --from` puts the cache boundary between stages; `--restore` (FR-11) puts
+it in the right *place*. The isolate stage runs the tool twice — once with `--restore`, once without —
+and the build stage copies the restore half, runs `dotnet restore`, then copies the full half over it
+(both halves share a mirror root, per pipeline step 6, so they overlay exactly). The restore half
+contains no sources, so an ordinary source edit leaves it byte-identical and `RUN dotnet restore`
+stays cached. This is the one property the whole feature rests on, so QP-12 asserts it directly: an
+E2E test changes a file *inside* the isolated closure and requires `dotnet restore` to be `CACHED`
+while the build layer reruns.
 
-- **Self-contained, two-stage** — `dotnet tool install -g dotnet-isolate` and `dotnet isolate` run
-  in their own build stage; the main build stage reaches the isolated output via `COPY --from`. No
-  host/CI-runner setup beyond Docker itself, and works with any builder.
-- **Host-side** — `dotnet isolate` runs on the host/CI runner *before* `docker build`, and the
-  Dockerfile just `COPY`s the resulting (deterministic, per REL-1) output folder directly from the
-  build context. Also works with any builder; trades "nothing but Docker needed" for "no .NET SDK
-  pulled into a throwaway build stage."
+**Bind mount, not `COPY . /src`.** The source reaches the isolate stage through
+`RUN --mount=type=bind,target=/src`. `COPY . /src` would pull the entire build context into that
+stage's layers — precisely the cost the tool exists to avoid — whereas the mount is read-only and
+transient, which is all the tool needs: it reads the source and writes only to its output directory.
+The price is buildx: the classic builder has no bind mounts, so DI-1's earlier "works under any
+builder" guarantee is dropped, along with the two patterns that carried it (the `COPY . /src`
+self-contained one and the host-side one). Hardlinking across the mount fails, and REL-2's upfront
+`LinkStrategy.probe` is what quietly absorbs that — it detects the failure once and copies instead,
+with no configuration. REL-2 was written for FAT32 sticks and network mounts; it is now what makes
+the documented Docker pattern work at all.
+
+(A dedicated `dotnet-isolate` Docker image was considered as a way to make the isolate stage
+cheaper/more pinned, and dropped: the `RUN dotnet tool install` step sits before anything that
+depends on the source, so it is cached across builds on its own, and the isolate stage can reuse the
+same SDK base image the build stage needs anyway — a separate published image bought no caching
+benefit, only minor polish, for a maintenance cost not worth it right now.)
 
 ## CI / release pipeline (QP-4, QP-5, QP-7, QP-9)
 

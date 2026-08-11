@@ -28,11 +28,22 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, `NuGet.config`,
   `global.json`, and `.editorconfig` files it finds along the way, since MSBuild implicitly
   consumes these during restore/build even though they're never referenced explicitly by a project.
-- **FR-6** — The output location defaults to `./<ProjectName>` and is overridable with
+- **FR-6** — The output location defaults to `./<ProjectName>` — or `./<ProjectName>.restore` under
+  `--restore` (FR-11), so the two phases of one project don't collide — and is overridable with
   `-o`/`--output-dir`, which accepts any relative or absolute path (not just a plain name created
-  inside the current directory).
-- **FR-7** — If the output folder already exists, the tool deletes it and recreates it from scratch
-  before writing, so stale files from a previous run never linger.
+  inside the current directory). With more than one entry project (FR-13) there is no single project
+  name to default to, so `-o`/`--output-dir` is required rather than guessed.
+- **FR-7** — If the output folder already exists, the tool merges into it: files are placed over
+  whatever is there, nothing is deleted, and every entry the run did not itself produce is reported
+  to the user. `--clean` (FR-12) restores delete-and-recreate for callers who need the output to
+  contain exactly the isolated set. Deletion was previously the default and was reversed because it
+  is destructive: with `-o` pointing at the solution root, the tool deleted the entire source tree
+  and only then failed. Two further guards follow from the same incident — before any filesystem
+  mutation the tool fails when the output directory contains every resolved input file, naming it
+  and explaining that it would consume its own inputs; and every resolved input that lives under the
+  output directory is excluded from the input set (and reported), since a previous run's output is
+  indistinguishable from source to MSBuild's default globs and would otherwise be materialized
+  inside itself, one level deeper each run.
 - **FR-8** — By default, the tool locates its "source solution" (used as FR-3's template and
   FR-5's walk-up ceiling) by walking up from the target project's directory to the first ancestor
   directory containing a `.sln`/`.slnx` file. Since more than one solution can reference the same
@@ -57,6 +68,39 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   `.editorconfig` from the user's home directory as readily as from the repo. The tool includes
   these too, but bounds them by the solution root (FR-8) — the same ceiling FR-5 already uses —
   so an out-of-repo file can never be copied in and drag the mirror root (FR-2) out with it.
+- **FR-11** — `--restore` emits only the files `dotnet restore` needs in order to evaluate the
+  project graph: the included project files, the generated scoped solution (FR-3), the walk-up
+  implicit files `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`,
+  `NuGet.config` and `global.json`, and `packages.lock.json` (without which a locked-mode restore
+  fails). `.editorconfig` is deliberately excluded even though FR-5 collects it: restore never reads
+  it, so including it would invalidate the cached restore layer on every formatting-rule edit —
+  which is the one thing this flag exists to prevent (DI-1). Sources, `appsettings.json`, rulesets
+  and embedded resources are excluded for the same reason. Without the flag, behaviour is unchanged
+  and the complete set is emitted; producing both halves means two invocations into two output
+  directories, which evaluates MSBuild twice. That cost against PR-1 is accepted deliberately, in
+  exchange for a smaller flag surface than a single invocation emitting both halves. Both phases
+  compute the mirror root from the *full* resolved set, so the two outputs overlay exactly and the
+  restore half can be `COPY`d and then overwritten by the full half.
+- **FR-12** — `--clean` deletes and recreates the output directory before writing, restoring the
+  behaviour FR-7 used to have by default. It is subject to FR-7's self-consumption check, which runs
+  first, so `--clean` can never be the thing that deletes a source tree.
+- **FR-13** — The tool accepts one or more entry projects in a single run. The project graph,
+  resolved file set, mirror root and generated solution file are all computed over the union of
+  their closures, deduplicated. A single entry project behaves exactly as before. Solution discovery
+  (FR-8) walks up from the *first* entry project only, so an entry project that does not live under
+  the discovered solution's directory is reported as a warning: its files are still isolated, but
+  the generated solution file is filtered from the source solution and can only contain projects
+  that were already members of it.
+- **FR-14** — A path that a project's MSBuild *items* resolve to but which does not exist on disk is
+  skipped, and each such path is reported to the user, rather than failing the run at
+  materialization. The motivating case: a `.csproj` declaring `<None Include="..\.dockerignore"/>`
+  where the `.dockerignore` excludes itself from the Docker build context — MSBuild still reports
+  the item, since item resolution never consults the disk. Filtering happens before the mirror root
+  is computed (FR-2), so an absent out-of-tree file also stops inflating the output tree.
+  Property-derived paths (FR-9) continue to be dropped *silently*: a property is a scalar any SDK
+  may default to a path never meant to exist, whereas an item was authored by someone and a missing
+  one is worth reporting.
+
 ## Performance
 
 - **PR-1** — The analysis phase (determining the full set of files/projects to include) issues
@@ -81,19 +125,23 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
 
 ## Docker Integration
 
-- **DI-1** — Two supported Dockerfile patterns are documented, both of which work under any
-  Docker builder (classic or BuildKit) because they bridge the uncacheable "copy the whole solution
-  in" step into the expensive downstream steps via a `COPY --from=<stage>`, which Docker always
-  caches by checksumming the copied bytes rather than by chaining off the source stage's own layer
-  history — see DESIGN.md ("Docker integration patterns") for the mechanism:
-  1. **Self-contained, two-stage** — `dotnet isolate` runs in its own build stage (tool installed
-     via `dotnet tool install -g` there). No host/CI-runner setup beyond Docker itself.
-  2. **Host-side** — `dotnet isolate` runs on the host/CI runner *before* `docker build`, and the
-     Dockerfile just `COPY`s the resulting (deterministic, per REL-1) output folder from the build
-     context. No .NET SDK needed in any build stage.
-- **DI-2** — Neither pattern requires modifying the original solution/repo.
+- **DI-1** — Exactly one Dockerfile pattern is documented, and it requires buildx (the default
+  builder in current Docker); the previously-claimed classic-builder guarantee is dropped along with
+  the two patterns that carried it. `dotnet isolate` runs in its own build stage, with the source
+  reaching it through a **read-only bind mount** rather than `COPY . /src` — the tool only reads the
+  source and writes to its output directory, and the mount keeps the whole build context out of that
+  stage's layers, which is the cost the tool exists to avoid. The stage runs the tool **twice**:
+  once with `--restore` (FR-11) and once without, into two output directories. The build stage then
+  bridges to them with `COPY --from=<stage>`, whose cache key is the checksum of the copied bytes
+  rather than the producing stage's own layer history — so the isolate stage may rerun on every
+  build, as it must, while the layers below still cache-hit. Copying the restore half, running
+  `dotnet restore`, then copying the full half over it puts the cache boundary exactly where a
+  source edit does not cross it. See DESIGN.md ("Docker integration pattern") for the mechanism and
+  the verified finding that this checksum is mtime-insensitive, which is what makes it survive
+  hardlinked output and fresh CI clones.
+- **DI-2** — The pattern does not require modifying the original solution/repo.
 - **DI-3** — No dedicated `dotnet-isolate` Docker image is published (considered and dropped — see
-  DESIGN.md). Both patterns above rely only on the nuget.org-published global tool (QP-11).
+  DESIGN.md). The pattern above relies only on the nuget.org-published global tool (QP-11).
 
 ## Portability
 
@@ -139,10 +187,17 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   namespaces/modules.
 - **QP-11** — The tool is published to nuget.org as a .NET global tool.
 - **QP-12** — A separate end-to-end test suite drives real `docker build` runs — twice, back to
-  back, with an unrelated file changed in between — against both Dockerfile patterns in DI-1, and
-  asserts the expected layers are cache-hit on the second run. Deliberately exercises the classic
-  builder (not just BuildKit), since that's the less obvious case the DI-1 mechanism depends on. It
-  requires a Docker daemon, so it is not part of the coverage gates in QP-4/QP-5.
+  back, with a file changed in between — and asserts the expected layers are cache-hit on the second
+  run. Two cases, since they prove different things:
+  1. A file changed **outside** the isolated closure leaves the whole output unchanged, so
+     restore/build/publish all stay cached even though the isolate step demonstrably reran. This
+     covers the `COPY --from` bridge itself.
+  2. A file changed **inside** the isolated closure must still leave `RUN dotnet restore` `CACHED`
+     while the build layer reruns — the property the whole `--restore` split (FR-11, DI-1) rests on,
+     and one the first case says nothing about.
+  Both are asserted against real buildx builds. The classic builder is no longer exercised, since
+  DI-1 no longer claims to support it. The suite requires a Docker daemon, so it is not part of the
+  coverage gates in QP-4/QP-5.
 
 ## Out of scope for v1
 
