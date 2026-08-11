@@ -432,12 +432,47 @@ let ``isolate with RestoreOnly emits project and build files but not sources`` (
         Assert.False(File.Exists(Path.Combine(outputDir, "A", "appsettings.json")))
         Assert.False(File.Exists(Path.Combine(outputDir, ".editorconfig"))))
 
-// Both phases must share one mirror root, or the two outputs will not overlay.
+// Both phases must share one mirror root, or the two outputs will not overlay. Two things about
+// this fixture matter, or the test doesn't actually discriminate a per-phase mirror root from a
+// shared one:
+//
+// 1. A single-project fixture isn't enough - with nothing outside the project's own directory,
+//    the mirror root collapses to the same place either way. This fixture adds a file *outside*
+//    A's directory (an explicitly declared cross-directory Compile item - explicit because these
+//    are F# fixtures with implicit item globs disabled, see writeProject) so the full set's mirror
+//    root sits a level above A, while the restore subset alone - just the project and build files
+//    - would collapse to A's own directory if computed independently.
+// 2. The solution file has to live *inside* A's directory, not at `root`. Step 4's mirror-root
+//    input always includes the discovered solution root's directory (regardless of RestoreOnly),
+//    so a solution at `root` would itself force both phases' roots up to `root` and mask the bug
+//    this test exists to catch. Placing it in A means the solution root only pins the floor at
+//    A's own directory, leaving the cross-directory file as the sole reason the full phase's root
+//    should be a level higher.
 [<Fact>]
-let ``restore and full phases place project files at identical relative paths`` () =
+let ``restore and full phases compute the mirror root from the same full file set`` () =
     withTempDir (fun root ->
         writeProject (Path.Combine(root, "A")) "A" [] []
-        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+        Directory.CreateDirectory(Path.Combine(root, "shared")) |> ignore
+        File.WriteAllText(Path.Combine(root, "shared", "Extra.fs"), "module Shared.Extra")
+
+        // Overwrite the project written by writeProject with one that also references the file
+        // outside A's directory.
+        File.WriteAllText(
+            Path.Combine(root, "A", "A.fsproj"),
+            """<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.fs"/>
+    <Compile Include="../shared/Extra.fs"/>
+  </ItemGroup>
+</Project>
+"""
+        )
+
+        // Deliberately inside A, not at root - see point 2 above.
+        writeSolution (Path.Combine(root, "A", "Fixture.sln")) [ "A", "A.fsproj" ]
 
         let restoreDir = Path.Combine(root, "restore-output")
         let fullDir = Path.Combine(root, "full-output")
@@ -452,5 +487,14 @@ let ``restore and full phases place project files at identical relative paths`` 
         Pipeline.isolate baseOptions |> ignore
         Pipeline.isolate { baseOptions with OutputDir = Some fullDir; RestoreOnly = false } |> ignore
 
+        // The full set spans <root>/A and <root>/shared, so its mirror root is <root> and the
+        // project file lands one level down.
+        Assert.True(File.Exists(Path.Combine(fullDir, "A", "A.fsproj")))
+
+        // The restore subset is narrowed to just the project (plus build files), all inside
+        // <root>/A, and the solution root (also <root>/A) doesn't pull the floor any higher - if
+        // the mirror root were (wrongly) computed from that narrowed set instead of the full one,
+        // it would collapse to <root>/A and the project file would land at the restore output's
+        // top level instead of one level down.
         Assert.True(File.Exists(Path.Combine(restoreDir, "A", "A.fsproj")))
-        Assert.True(File.Exists(Path.Combine(fullDir, "A", "A.fsproj"))))
+        Assert.False(File.Exists(Path.Combine(restoreDir, "A.fsproj"))))
