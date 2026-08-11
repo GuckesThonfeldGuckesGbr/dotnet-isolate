@@ -57,6 +57,11 @@ let main argv =
         for entry in result.MissingFiles do
             eprintfn $"warning: {entry} is referenced by a project but does not exist; skipped"
 
+        // result.SolutionRoot is always Some here when this list is non-empty (see Pipeline.fs).
+        for entry in result.EntriesOutsideDiscoveredSolution do
+            eprintfn
+                $"warning: {entry} lies outside the discovered solution ({result.SolutionRoot.Value.SolutionFile}); the generated solution file may not include it"
+
         0
     with
     | :? ArguParseException as ex ->

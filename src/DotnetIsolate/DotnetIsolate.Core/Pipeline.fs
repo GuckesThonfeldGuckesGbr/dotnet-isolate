@@ -27,7 +27,13 @@ type IsolateResult =
       /// Item-derived paths referenced by a project that do not exist on disk, dropped rather than
       /// failing the run - e.g. a `<None Include="..\.dockerignore"/>` whose target was itself
       /// excluded from the Docker build context.
-      MissingFiles: string list }
+      MissingFiles: string list
+      /// Entry projects that do not live under the discovered solution's directory. Solution
+      /// discovery only ever walks up from the first entry, so these were never checked against
+      /// it: the generated scoped solution file may omit them even though their files were
+      /// isolated, and any ancestor-globbed ceiling files (e.g. .editorconfig) above their own
+      /// directory tree were never picked up either. Empty when no solution was found.
+      EntriesOutsideDiscoveredSolution: string list }
 
 /// Runs the full pipeline described in DESIGN.md (steps 1-7) end to end: resolves the project
 /// graph and its files, locates the solution (FR-8) and implicit repo-level files, computes the
@@ -41,9 +47,11 @@ let isolate (options: IsolateOptions) : IsolateResult =
     if List.isEmpty projectPaths then
         failwith "at least one project path is required"
 
-    // Solution discovery walks up from an entry project's directory; with several entries any of
-    // them finds the same solution, so the first is used and the others are validated against the
-    // graph it scopes.
+    // Solution discovery walks up from the first entry project's directory only. When every entry
+    // shares a solution (the common case) this finds it regardless of which entry happens to be
+    // first. But there is no check that the other entries are actually members of that solution -
+    // an entry living outside its directory tree is silently unvalidated here; see the
+    // outsideDiscoveredSolution warning below for the consequence and how it is surfaced.
     let projectDir = Path.GetDirectoryName(List.head projectPaths)
 
     // Steps 1 & 2 both need MSBuild evaluation per project - ProjectReference to walk the graph,
@@ -80,6 +88,17 @@ let isolate (options: IsolateOptions) : IsolateResult =
             projectDir
 
     let ceiling = solutionRoot |> Option.map (fun r -> r.Directory)
+
+    // The consequence of the limitation noted above, made visible: an entry outside the
+    // discovered solution's directory tree got its files isolated (steps 1-2 don't care where a
+    // solution is), but step 7 below filters the *source* solution's contents, so it can only ever
+    // include projects that were already members of it - and ancestor-globbed ceiling files above
+    // this entry's own tree were never resolved either, since `ceiling` only bounds the discovered
+    // solution's directory.
+    let entriesOutsideDiscoveredSolution =
+        match solutionRoot with
+        | Some root -> projectPaths |> List.filter (fun p -> not (MirrorRoot.isUnder root.Directory p))
+        | None -> []
 
     // Step 2: each project's build-relevant files - reuses the items already fetched above.
     let resolvers =
@@ -172,4 +191,5 @@ let isolate (options: IsolateOptions) : IsolateResult =
       Strategy = strategy
       ExcludedUnderOutput = partition.ExcludedUnderOutput
       StaleEntries = staleEntries
-      MissingFiles = resolvedProjectFiles.MissingItemFiles }
+      MissingFiles = resolvedProjectFiles.MissingItemFiles
+      EntriesOutsideDiscoveredSolution = entriesOutsideDiscoveredSolution }

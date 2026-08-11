@@ -361,3 +361,41 @@ let ``isolate requires an explicit output directory for more than one entry proj
                 |> ignore)
 
         Assert.Contains("output directory", ex.Message))
+
+// Solution discovery only ever walks up from the first entry project, so a second entry that
+// resolves to a *different* solution (or none at all) is never validated against the one that was
+// found. This proves the consequence is surfaced as a warning rather than silently swallowed.
+[<Fact>]
+let ``isolate warns when a second entry project sits outside the discovered solution`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "Inside", "A")) "A" [] []
+        writeSolution (Path.Combine(root, "Inside", "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        // B lives entirely outside "Inside", so it is not a member of the solution that discovery
+        // finds by walking up from A - and has no solution of its own either.
+        writeProject (Path.Combine(root, "Outside", "B")) "B" [] []
+
+        let outputDir = Path.Combine(root, "output")
+
+        let result =
+            Pipeline.isolate
+                { ProjectPaths =
+                    [ Path.Combine(root, "Inside", "A", "A.fsproj")
+                      Path.Combine(root, "Outside", "B", "B.fsproj") ]
+                  OutputDir = Some outputDir
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
+
+        // Both entries' files still made it into the isolated tree...
+        Assert.True(File.Exists(Path.Combine(outputDir, "Inside", "A", "A.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "Outside", "B", "B.fsproj")))
+
+        // ...but B is named as outside the discovered solution, since the generated Fixture.sln
+        // can only ever include projects that were already members of the source solution.
+        Assert.Equal(1, result.EntriesOutsideDiscoveredSolution.Length)
+
+        Assert.Equal(
+            Path.GetFileName(Path.Combine(root, "Outside", "B", "B.fsproj")),
+            Path.GetFileName(result.EntriesOutsideDiscoveredSolution.Head)
+        ))
