@@ -13,7 +13,10 @@ type ProjectReferenceResolver = string -> string list
 /// project turns O(project count) sequential calls into O(graph depth) sequential rounds - PR-1
 /// requires the analysis phase to complete in under a second even for a complex solution, which a
 /// few hundred sequential MSBuild spawns cannot meet, but a few parallel rounds can.
-let resolve (getReferences: ProjectReferenceResolver) (entryProject: string) : string list =
+///
+/// Several entry projects are seeded into the first BFS level together, so a project reachable
+/// from more than one of them is still visited once and the result is their unioned closure.
+let resolveMany (getReferences: ProjectReferenceResolver) (entryProjects: string list) : string list =
     let rec go (visited: Set<string>) (frontier: string list) (levels: string list list) : string list list =
         match frontier with
         | [] -> levels
@@ -31,4 +34,8 @@ let resolve (getReferences: ProjectReferenceResolver) (entryProject: string) : s
 
             go visited nextFrontier (frontier :: levels)
 
-    go Set.empty [ entryProject ] [] |> List.rev |> List.concat
+    go Set.empty (List.distinct entryProjects) [] |> List.rev |> List.concat
+
+/// Single-entry `resolveMany`.
+let resolve (getReferences: ProjectReferenceResolver) (entryProject: string) : string list =
+    resolveMany getReferences [ entryProject ]

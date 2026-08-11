@@ -2,6 +2,7 @@ module DotnetIsolate.UnitTests.ProjectGraphTests
 
 open Xunit
 open DotnetIsolate.Core.ProjectGraph
+open DotnetIsolate.UnitTests.PathHelpers
 
 let private resolverFrom (edges: Map<string, string list>) : ProjectReferenceResolver =
     fun project -> edges |> Map.tryFind project |> Option.defaultValue []
@@ -91,3 +92,30 @@ let ``a shared dependency discovered concurrently by many sibling projects at th
     // (concurrently discovered by all 200 siblings), is resolved exactly once - not 200 times.
     for project in "Root" :: "Shared" :: siblings do
         Assert.Equal(1, callCounts.[project])
+
+// Two entry projects sharing a dependency: the union, with the shared project appearing once.
+[<Fact>]
+let ``resolveMany returns the deduplicated union of two overlapping closures`` () =
+    let login = path [ "repo"; "Login"; "Login.fsproj" ]
+    let loginQs = path [ "repo"; "LoginQs"; "LoginQs.fsproj" ]
+    let shared = path [ "repo"; "Shared"; "Shared.fsproj" ]
+
+    let references p =
+        if p = login then [ shared ]
+        elif p = loginQs then [ shared ]
+        else []
+
+    let result = resolveMany references [ login; loginQs ]
+
+    Assert.Equal(3, result.Length)
+    Assert.Contains(login, result)
+    Assert.Contains(loginQs, result)
+    Assert.Contains(shared, result)
+
+[<Fact>]
+let ``resolveMany with a single entry matches resolve`` () =
+    let a = path [ "repo"; "A"; "A.fsproj" ]
+    let b = path [ "repo"; "B"; "B.fsproj" ]
+    let references p = if p = a then [ b ] else []
+
+    Assert.Equal<string list>(resolve references a, resolveMany references [ a ])
