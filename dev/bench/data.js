@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786090689556,
+  "lastUpdate": 1786440327280,
   "repoUrl": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate",
   "entries": {
     "Benchmark": [
@@ -194,6 +194,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "OrchardCore.Cms.Web isolate: wall-clock time",
             "value": 52836,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "committer": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "distinct": true,
+          "id": "2c979e5f64a2acd16603b48660f1943589cba72e",
+          "message": "fix: stop a trailing separator on -o disabling the output-directory safeguards\n\nA trailing separator on the output path - which Path.GetFullPath preserves and\nwhich shell tab-completion adds to any directory argument - split into an empty\ntrailing segment that MirrorRoot.isUnder could never match. That switched off\nevery output-directory safeguard at once: nothing was excluded as living under\nthe output, so the self-consumption check saw a non-empty kept set and passed,\nand --clean then ran Directory.Delete over the source tree. `dotnet isolate\nA.fsproj --clean -o repo/` deleted the user's sources - the exact bug this branch\nexists to fix, re-armed by one character.\n\nNormalise the output path once where it is computed (GetFullPath then\nTrimEndingDirectorySeparator), and make isUnder drop trailing empty segments so\nthe primitive is robust for every caller. compute keeps its leading empty\nsegment: it rebuilds paths by joining segments, and on Unix that is what keeps\nthe result rooted.\n\nAlso close the second delete path: --clean now refuses to run when the output\ndirectory contains ANY resolved input, not just when it contains them all. The\ndefault merge mode can tolerate partial overlap (worst case: an incomplete tree\nplus warnings), but --clean deletes, so it must demand disjointness -\n`--clean -o src/Shared` previously passed validation and destroyed real sources.\nThe error names the directory and an input it would have taken with it. FR-12 and\nDESIGN.md now say what the code actually guarantees.\n\nTwo smaller safety fixes: placeFile's Copy branch gets the same self-copy guard\nits Hardlink sibling has, and an empty restore subset fails with a message naming\nthe cause instead of F#'s bare \"input list was empty\".\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-11T08:32:13+02:00",
+          "tree_id": "4876cbaaa1a42a3cf4bb343e7a30d580a1ed32ab",
+          "url": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate/commit/2c979e5f64a2acd16603b48660f1943589cba72e"
+        },
+        "date": 1786440326861,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "OrchardCore.Cms.Web isolate: included files",
+            "value": 981,
+            "unit": "files"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: included projects",
+            "value": 198,
+            "unit": "projects"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: wall-clock time",
+            "value": 42735,
             "unit": "ms"
           }
         ]
