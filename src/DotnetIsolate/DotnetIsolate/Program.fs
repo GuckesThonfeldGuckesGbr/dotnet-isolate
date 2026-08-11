@@ -4,7 +4,7 @@ open Argu
 open DotnetIsolate.Core
 
 type Arguments =
-    | [<MainCommand; ExactlyOnce>] ProjectPath of path: string
+    | [<MainCommand; ExactlyOnce>] Project_Paths of paths: string list
     | [<AltCommandLine("-o")>] Output_Dir of dir: string
     | [<AltCommandLine("-s")>] Solution of path: string
     | Clean
@@ -12,7 +12,7 @@ type Arguments =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-            | ProjectPath _ -> "path to the .csproj/.fsproj file to isolate"
+            | Project_Paths _ -> "one or more .csproj/.fsproj files to isolate"
             | Output_Dir _ -> "output directory (default: ./<ProjectName>)"
             | Solution _ -> "solution file to use, overriding auto-discovery (FR-8)"
             | Clean -> "delete and recreate the output directory instead of merging into it"
@@ -31,7 +31,7 @@ let main argv =
 
         let result =
             Pipeline.isolate
-                { ProjectPaths = [ results.GetResult(ProjectPath) ]
+                { ProjectPaths = results.GetResult(Project_Paths)
                   OutputDir = results.TryGetResult(Output_Dir)
                   SolutionPath = results.TryGetResult(Solution)
                   RestoreOnly = false

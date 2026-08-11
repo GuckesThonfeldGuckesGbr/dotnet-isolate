@@ -35,10 +35,16 @@ type IsolateResult =
 /// was found - generates a scoped copy of it. Returns enough to report what happened; console
 /// output (e.g. which solution was used, per FR-8) is the CLI's job, not this function's.
 let isolate (options: IsolateOptions) : IsolateResult =
-    // Tasks 7 and 9 give ProjectPaths (multi-project unions) and RestoreOnly their real
-    // behaviour; for now the first entry project is all that's consumed.
-    let projectPath = Path.GetFullPath(List.head options.ProjectPaths)
-    let projectDir = Path.GetDirectoryName(projectPath)
+    // Task 8 gives RestoreOnly its real behaviour; for now it stays inert.
+    let projectPaths = options.ProjectPaths |> List.map Path.GetFullPath
+
+    if List.isEmpty projectPaths then
+        failwith "at least one project path is required"
+
+    // Solution discovery walks up from an entry project's directory; with several entries any of
+    // them finds the same solution, so the first is used and the others are validated against the
+    // graph it scopes.
+    let projectDir = Path.GetDirectoryName(List.head projectPaths)
 
     // Steps 1 & 2 both need MSBuild evaluation per project - ProjectReference to walk the graph,
     // the file item types plus the file-path properties (e.g. CodeAnalysisRuleSet) to resolve
@@ -59,8 +65,8 @@ let isolate (options: IsolateOptions) : IsolateResult =
     let projectReferenceResolver: ProjectGraph.ProjectReferenceResolver =
         fun projectPath -> getItemsCached projectPath |> Map.tryFind "ProjectReference" |> Option.defaultValue []
 
-    // Step 1: the transitive project graph.
-    let projects = ProjectGraph.resolve projectReferenceResolver projectPath
+    // Step 1: the transitive project graph - the union of every entry project's closure.
+    let projects = ProjectGraph.resolveMany projectReferenceResolver projectPaths
     let projectDirs = projects |> List.map Path.GetDirectoryName
 
     // Step 3's solution discovery runs before step 2 because it needs no MSBuild evaluation (just
@@ -95,13 +101,19 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // "the output directory contains every resolved input file" - which is only true, and only the
     // real problem, once there was something to partition in the first place.
     if List.isEmpty allFiles then
-        failwith $"no build-relevant files were resolved for {projectPath}"
+        let describedProjectPaths = String.concat ", " projectPaths
+        failwith $"no build-relevant files were resolved for {describedProjectPaths}"
 
-    // FR-6: output defaults to ./<ProjectName>, or an explicit -o/--output-dir path.
+    // FR-6: output defaults to ./<ProjectName>, or an explicit -o/--output-dir path. With more
+    // than one entry project there is no single name to default to, so an explicit output
+    // directory becomes mandatory instead of guessing.
     let outputDir =
-        match options.OutputDir with
-        | Some dir -> Path.GetFullPath(dir)
-        | None -> Path.GetFullPath(Path.GetFileNameWithoutExtension(projectPath))
+        match options.OutputDir, projectPaths with
+        | Some dir, _ -> Path.GetFullPath(dir)
+        | None, [ single ] -> Path.GetFullPath(Path.GetFileNameWithoutExtension(single))
+        | None, _ ->
+            failwith
+                "an explicit output directory (-o/--output-dir) is required when more than one entry project is given"
 
     // A previous run's output is indistinguishable from source to MSBuild's implicit globs, so
     // drop anything under the output directory before it can inflate the mirror root or get

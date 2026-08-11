@@ -306,3 +306,58 @@ let ``isolate warns about a referenced file that does not exist instead of faili
                   Clean = false }
 
         Assert.Contains(result.MissingFiles, fun f -> Path.GetFileName(f) = "absent.txt"))
+
+// The login + login.qs shape: two entry services sharing a dependency, isolated into one tree.
+[<Fact>]
+let ``isolate unions the closures of two entry projects`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "Login")) "Login" [ "Shared" ] []
+        writeProject (Path.Combine(root, "LoginQs")) "LoginQs" [ "Shared" ] []
+        writeProject (Path.Combine(root, "Shared")) "Shared" [] []
+        writeProject (Path.Combine(root, "Unrelated")) "Unrelated" [] []
+
+        writeSolution
+            (Path.Combine(root, "Fixture.sln"))
+            [ "Login", "Login/Login.fsproj"
+              "LoginQs", "LoginQs/LoginQs.fsproj"
+              "Shared", "Shared/Shared.fsproj"
+              "Unrelated", "Unrelated/Unrelated.fsproj" ]
+
+        let outputDir = Path.Combine(root, "output")
+
+        let result =
+            Pipeline.isolate
+                { ProjectPaths =
+                    [ Path.Combine(root, "Login", "Login.fsproj")
+                      Path.Combine(root, "LoginQs", "LoginQs.fsproj") ]
+                  OutputDir = Some outputDir
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
+
+        Assert.True(File.Exists(Path.Combine(outputDir, "Login", "Login.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "LoginQs", "LoginQs.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "Shared", "Shared.fsproj")))
+        // The unrelated project is still excluded - that is the whole point of the tool.
+        Assert.False(File.Exists(Path.Combine(outputDir, "Unrelated", "Unrelated.fsproj")))
+        Assert.Equal(3, result.IncludedProjects.Length))
+
+[<Fact>]
+let ``isolate requires an explicit output directory for more than one entry project`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeProject (Path.Combine(root, "B")) "B" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj"; "B", "B/B.fsproj" ]
+
+        let ex =
+            Assert.ThrowsAny<exn>(fun () ->
+                Pipeline.isolate
+                    { ProjectPaths =
+                        [ Path.Combine(root, "A", "A.fsproj"); Path.Combine(root, "B", "B.fsproj") ]
+                      OutputDir = None
+                      SolutionPath = None
+                      RestoreOnly = false
+                      Clean = false }
+                |> ignore)
+
+        Assert.Contains("output directory", ex.Message))

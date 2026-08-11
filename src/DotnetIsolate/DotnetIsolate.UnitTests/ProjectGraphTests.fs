@@ -112,6 +112,31 @@ let ``resolveMany returns the deduplicated union of two overlapping closures`` (
     Assert.Contains(loginQs, result)
     Assert.Contains(shared, result)
 
+// The exact anti-pattern resolveMany exists to avoid: resolving each entry separately and
+// concatenating would pass the two tests above (they only check the returned set) while still
+// re-spawning MSBuild once per entry for every shared dependency. This counts resolver
+// invocations directly, the way the diamond-dependency counting test above does for `resolve`.
+[<Fact>]
+let ``resolveMany invokes the resolver exactly once for a dependency shared by two entries`` () =
+    let login = path [ "repo"; "Login"; "Login.fsproj" ]
+    let loginQs = path [ "repo"; "LoginQs"; "LoginQs.fsproj" ]
+    let shared = path [ "repo"; "Shared"; "Shared.fsproj" ]
+
+    let callCounts = System.Collections.Concurrent.ConcurrentDictionary<string, int>()
+    let edges = Map [ login, [ shared ]; loginQs, [ shared ]; shared, [] ]
+
+    let countingResolver: ProjectReferenceResolver =
+        fun project ->
+            callCounts.AddOrUpdate(project, 1, (fun _ n -> n + 1)) |> ignore
+            edges |> Map.tryFind project |> Option.defaultValue []
+
+    let result = resolveMany countingResolver [ login; loginQs ]
+
+    Assert.Equal<Set<string>>(Set [ login; loginQs; shared ], Set result)
+
+    for project in [ login; loginQs; shared ] do
+        Assert.Equal(1, callCounts.[project])
+
 [<Fact>]
 let ``resolveMany with a single entry matches resolve`` () =
     let a = path [ "repo"; "A"; "A.fsproj" ]
