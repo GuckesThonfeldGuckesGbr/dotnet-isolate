@@ -82,8 +82,15 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   compute the mirror root from the *full* resolved set, so the two outputs overlay exactly and the
   restore half can be `COPY`d and then overwritten by the full half.
 - **FR-12** — `--clean` deletes and recreates the output directory before writing, restoring the
-  behaviour FR-7 used to have by default. It is subject to FR-7's self-consumption check, which runs
-  first, so `--clean` can never be the thing that deletes a source tree.
+  behaviour FR-7 used to have by default. Because it deletes, it demands more of the output
+  directory than the default merge mode does: as well as FR-7's self-consumption check, a run with
+  `--clean` is refused outright when the output directory contains *any* resolved input file, naming
+  the directory and one of the inputs it would have destroyed. FR-7's check alone is not sufficient
+  here — it only fires on *total* overlap, so `--clean -o src/Shared`, where `src/Shared` holds real
+  sources while other inputs live elsewhere, would otherwise pass validation and then be deleted.
+  Merge mode still tolerates that partial overlap, since its worst case is an incomplete output tree
+  plus a warning rather than a deletion. Both checks run before any filesystem mutation, so `--clean`
+  can never be the thing that deletes a source tree.
 - **FR-13** — The tool accepts one or more entry projects in a single run. The project graph,
   resolved file set, mirror root and generated solution file are all computed over the union of
   their closures, deduplicated. A single entry project behaves exactly as before. Solution discovery

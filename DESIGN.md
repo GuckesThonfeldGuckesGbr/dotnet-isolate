@@ -152,12 +152,23 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    Two things happen *before* this step and before the mirror root of step 4, not here, because both
    have to precede any filesystem mutation: every resolved input under the output directory is
    partitioned out of the input set (`OutputSafety.partitionInputs`), and the run fails outright if
-   that leaves nothing (`OutputSafety.validate`). The order is what makes them work. Pointing `-o` at
+   that leaves nothing (`OutputSafety.validate`) — or, under `--clean`, if the partition excluded
+   *anything at all*, since a run that deletes the output directory cannot afford even partial
+   overlap with the inputs (FR-12). The order is what makes them work. Pointing `-o` at
    the solution root previously deleted the whole source tree and *then* failed; pointing it inside a
    project directory previously succeeded once and failed on the second run, because the SDK's
    default globs collected the first run's output as `Compile` items of the enclosing project and the
    tool tried to place the output inside itself. Excluding those inputs before the mirror root is
    computed also stops them dragging it outward.
+
+   Both checks compare paths segment-wise, so the output path is normalised once where it is
+   computed (`Path.GetFullPath` then `Path.TrimEndingDirectorySeparator`). A trailing separator —
+   which `Path.GetFullPath` preserves and which shell tab-completion adds to any directory argument
+   — otherwise splits into an empty trailing segment that matches no real segment, silently
+   disabling both checks and putting the source tree back within reach of `--clean`'s delete.
+   `MirrorRoot.isUnder` drops trailing empty segments for the same reason, so no future caller has
+   to know to trim; `MirrorRoot.compute` deliberately does not, since it rebuilds a path by joining
+   its segments and the leading empty segment is what keeps that result rooted on Unix.
 
    When `--restore` is set, `Phase.restoreSubset` narrows the placed set to the restore inputs
    (FR-11) *after* step 4 has computed the mirror root from the full set. Deriving the root from the

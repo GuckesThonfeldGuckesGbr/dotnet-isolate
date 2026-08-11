@@ -208,6 +208,63 @@ let ``isolate refuses an output directory that contains every input, leaving the
         Assert.True(File.Exists(Path.Combine(root, "A", "A.fsproj")))
         Assert.True(File.Exists(Path.Combine(root, "Fixture.sln"))))
 
+// The same destructive reproduction, one character away from re-arming itself: a trailing
+// separator on -o. Shells tab-complete one onto any directory argument, and Path.GetFullPath
+// preserves it, so the value reaching the safety checks was ".../repo/" - which, split on
+// separators, ends in an empty segment that matches no real path segment. Nothing was excluded as
+// living under the output directory, so the self-consumption guard saw a non-empty kept set and
+// waved the run through; with --clean the very next step was Directory.Delete on the source tree.
+[<Fact>]
+let ``isolate refuses an output directory given with a trailing separator, leaving the source intact`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        let outputDirWithSeparator = root + string Path.DirectorySeparatorChar
+
+        let ex =
+            Assert.ThrowsAny<exn>(fun () ->
+                Pipeline.isolate
+                    { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+                      OutputDir = Some outputDirWithSeparator
+                      SolutionPath = None
+                      RestoreOnly = false
+                      Clean = true }
+                |> ignore)
+
+        Assert.Contains("output directory", ex.Message)
+        // The data-loss regression guard: the source tree must still be there.
+        Assert.True(File.Exists(Path.Combine(root, "A", "A.fsproj")))
+        Assert.True(File.Exists(Path.Combine(root, "Fixture.sln"))))
+
+// --clean deletes the output directory outright, so it is only safe when that directory holds
+// none of the inputs. Here it holds some but not all: B's own sources live in the directory
+// pointed at by -o, while A's live elsewhere, so the self-consumption check (which only fires
+// when *every* input is swallowed) passes and the delete would take B's sources with it.
+[<Fact>]
+let ``isolate with Clean refuses an output directory that contains only some of the inputs`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [ "B" ] []
+        writeProject (Path.Combine(root, "B")) "B" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj"; "B", "B/B.fsproj" ]
+
+        let outputDir = Path.Combine(root, "B")
+
+        let ex =
+            Assert.ThrowsAny<exn>(fun () ->
+                Pipeline.isolate
+                    { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+                      OutputDir = Some outputDir
+                      SolutionPath = None
+                      RestoreOnly = false
+                      Clean = true }
+                |> ignore)
+
+        Assert.Contains("--clean", ex.Message)
+        // B's sources - which the delete would have destroyed - are untouched.
+        Assert.True(File.Exists(Path.Combine(root, "B", "B.fsproj")))
+        Assert.True(File.Exists(Path.Combine(root, "B", "Program.fs"))))
+
 // The re-ingestion reproduction: an output directory nested inside a project directory is swept
 // up by the SDK's default globs on the second run.
 //

@@ -32,7 +32,15 @@ let placeFile (strategy: LinkStrategy.Strategy) (mirrorRoot: string) (outputRoot
         | Error code ->
             failwith
                 $"Hardlink.create failed for {sourceFile} -> {destination} (error {code}) despite the strategy probe succeeding"
-    | LinkStrategy.Copy -> File.Copy(sourceFile, destination, overwrite = true)
+    | LinkStrategy.Copy ->
+        // The same guard as the Hardlink branch above, for the same reason and with the same
+        // comparison: File.Copy onto the file it is reading throws rather than no-opping. Equally
+        // unreachable via Pipeline (OutputSafety excludes anything under the output directory
+        // before materialize runs), but leaving one branch guarded and the other not is a trap for
+        // the next caller of this public function - whichever strategy the probe happens to pick
+        // should not decide whether their own source file survives.
+        if not (System.String.Equals(destination, sourceFile, System.StringComparison.OrdinalIgnoreCase)) then
+            File.Copy(sourceFile, destination, overwrite = true)
 
 /// Places every file in `files` (absolute paths under `mirrorRoot`) at its mirrored relative
 /// location under `outputRoot`, using `strategy` (pipeline step 6).

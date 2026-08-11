@@ -125,22 +125,35 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // FR-6: output defaults to ./<ProjectName>, or an explicit -o/--output-dir path. With more
     // than one entry project there is no single name to default to, so an explicit output
     // directory becomes mandatory instead of guessing.
+    //
+    // Normalised exactly once, here, because every output-directory safeguard downstream compares
+    // it against resolved file paths segment by segment. Path.GetFullPath preserves a trailing
+    // separator (verified: Path.GetFullPath("out/") returns ".../out/"), and a trailing separator
+    // splits into an empty segment that matches nothing - so `-o repo/`, which is simply what
+    // shell tab-completion produces, used to switch off the exclusion of files under the output,
+    // switch off the self-consumption check that depends on it, and hand a source tree straight to
+    // --clean's Directory.Delete. MirrorRoot.isUnder now tolerates a trailing separator too; this
+    // trim additionally keeps the value reported back to the user, and used to build paths under
+    // the output, in one canonical spelling.
     let outputDir =
-        match options.OutputDir, projectPaths with
-        | Some dir, _ -> Path.GetFullPath(dir)
-        | None, [ single ] ->
-            let name = Path.GetFileNameWithoutExtension(single)
-            Path.GetFullPath(if options.RestoreOnly then $"{name}.restore" else name)
-        | None, _ ->
-            failwith
-                "an explicit output directory (-o/--output-dir) is required when more than one entry project is given"
+        let raw =
+            match options.OutputDir, projectPaths with
+            | Some dir, _ -> Path.GetFullPath(dir)
+            | None, [ single ] ->
+                let name = Path.GetFileNameWithoutExtension(single)
+                Path.GetFullPath(if options.RestoreOnly then $"{name}.restore" else name)
+            | None, _ ->
+                failwith
+                    "an explicit output directory (-o/--output-dir) is required when more than one entry project is given"
+
+        Path.TrimEndingDirectorySeparator(raw)
 
     // A previous run's output is indistinguishable from source to MSBuild's implicit globs, so
     // drop anything under the output directory before it can inflate the mirror root or get
     // placed inside itself.
     let partition = OutputSafety.partitionInputs outputDir allFiles
 
-    match OutputSafety.validate outputDir partition with
+    match OutputSafety.validate options.Clean outputDir partition with
     | Error message -> failwith message
     | Ok() -> ()
 
@@ -165,6 +178,16 @@ let isolate (options: IsolateOptions) : IsolateResult =
             Phase.restoreSubset projects allFiles
         else
             allFiles
+
+    // Checked before the probe below, which needs a real file to link. The full set is already
+    // known to be non-empty, but Phase.restoreSubset narrows it, so an entry project whose subset
+    // came back empty would otherwise surface as F#'s bare "The input list was empty" - a message
+    // that names neither the flag nor the projects responsible.
+    if List.isEmpty filesToPlace then
+        let describedProjectPaths = String.concat ", " projectPaths
+
+        failwith
+            $"the --restore phase resolved no files to emit for {describedProjectPaths}; nothing would be written"
 
     // Step 5: decide the link strategy once, via a real file already in the resolved set.
     let strategy = LinkStrategy.probe (List.head filesToPlace) outputDir
