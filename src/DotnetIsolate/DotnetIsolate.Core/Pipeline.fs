@@ -41,7 +41,6 @@ type IsolateResult =
 /// was found - generates a scoped copy of it. Returns enough to report what happened; console
 /// output (e.g. which solution was used, per FR-8) is the CLI's job, not this function's.
 let isolate (options: IsolateOptions) : IsolateResult =
-    // Task 8 gives RestoreOnly its real behaviour; for now it stays inert.
     let projectPaths = options.ProjectPaths |> List.map Path.GetFullPath
 
     if List.isEmpty projectPaths then
@@ -129,7 +128,9 @@ let isolate (options: IsolateOptions) : IsolateResult =
     let outputDir =
         match options.OutputDir, projectPaths with
         | Some dir, _ -> Path.GetFullPath(dir)
-        | None, [ single ] -> Path.GetFullPath(Path.GetFileNameWithoutExtension(single))
+        | None, [ single ] ->
+            let name = Path.GetFileNameWithoutExtension(single)
+            Path.GetFullPath(if options.RestoreOnly then $"{name}.restore" else name)
         | None, _ ->
             failwith
                 "an explicit output directory (-o/--output-dir) is required when more than one entry project is given"
@@ -156,12 +157,21 @@ let isolate (options: IsolateOptions) : IsolateResult =
         | Some root -> root
         | None -> failwith "could not compute a mirror root"
 
+    // The restore phase is applied after the mirror root is computed from the full set, so both
+    // phases share one root and their outputs overlay exactly - which is what lets a Dockerfile
+    // COPY the restore half, run `dotnet restore`, then COPY the full half over it.
+    let filesToPlace =
+        if options.RestoreOnly then
+            Phase.restoreSubset projects allFiles
+        else
+            allFiles
+
     // Step 5: decide the link strategy once, via a real file already in the resolved set.
-    let strategy = LinkStrategy.probe (List.head allFiles) outputDir
+    let strategy = LinkStrategy.probe (List.head filesToPlace) outputDir
 
     // Step 6: materialize the output folder, capturing pre-existing entries this run didn't
     // produce so the CLI can report them rather than silently deleting or ignoring them.
-    let staleEntries = Materialize.materialize strategy options.Clean mirrorRoot outputDir allFiles
+    let staleEntries = Materialize.materialize strategy options.Clean mirrorRoot outputDir filesToPlace
 
     // Step 7: generate the scoped solution file, if a source solution was found.
     match solutionRoot with
@@ -186,7 +196,7 @@ let isolate (options: IsolateOptions) : IsolateResult =
 
     { OutputDir = outputDir
       IncludedProjects = projects
-      FileCount = allFiles.Length
+      FileCount = filesToPlace.Length
       SolutionRoot = solutionRoot
       Strategy = strategy
       ExcludedUnderOutput = partition.ExcludedUnderOutput

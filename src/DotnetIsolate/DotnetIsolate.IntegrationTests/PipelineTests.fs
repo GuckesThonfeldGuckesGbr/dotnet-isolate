@@ -399,3 +399,58 @@ let ``isolate warns when a second entry project sits outside the discovered solu
             Path.GetFileName(Path.Combine(root, "Outside", "B", "B.fsproj")),
             Path.GetFileName(result.EntriesOutsideDiscoveredSolution.Head)
         ))
+
+[<Fact>]
+let ``isolate with RestoreOnly emits project and build files but not sources`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [ "B" ] [ "appsettings.json" ]
+        writeProject (Path.Combine(root, "B")) "B" [] []
+        File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration/>")
+        File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), "<Project/>")
+        File.WriteAllText(Path.Combine(root, ".editorconfig"), "root = true")
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj"; "B", "B/B.fsproj" ]
+
+        let outputDir = Path.Combine(root, "restore-output")
+
+        Pipeline.isolate
+            { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+              OutputDir = Some outputDir
+              SolutionPath = None
+              RestoreOnly = true
+              Clean = false }
+        |> ignore
+
+        // The restore inputs are present.
+        Assert.True(File.Exists(Path.Combine(outputDir, "A", "A.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "B", "B.fsproj")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "NuGet.config")))
+        Assert.True(File.Exists(Path.Combine(outputDir, "Directory.Packages.props")))
+        // The generated solution is written in both phases.
+        Assert.True(File.Exists(Path.Combine(outputDir, "Fixture.sln")))
+        // Sources, content and .editorconfig are not.
+        Assert.False(File.Exists(Path.Combine(outputDir, "A", "Program.fs")))
+        Assert.False(File.Exists(Path.Combine(outputDir, "A", "appsettings.json")))
+        Assert.False(File.Exists(Path.Combine(outputDir, ".editorconfig"))))
+
+// Both phases must share one mirror root, or the two outputs will not overlay.
+[<Fact>]
+let ``restore and full phases place project files at identical relative paths`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj" ]
+
+        let restoreDir = Path.Combine(root, "restore-output")
+        let fullDir = Path.Combine(root, "full-output")
+
+        let baseOptions: Pipeline.IsolateOptions =
+            { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+              OutputDir = Some restoreDir
+              SolutionPath = None
+              RestoreOnly = true
+              Clean = false }
+
+        Pipeline.isolate baseOptions |> ignore
+        Pipeline.isolate { baseOptions with OutputDir = Some fullDir; RestoreOnly = false } |> ignore
+
+        Assert.True(File.Exists(Path.Combine(restoreDir, "A", "A.fsproj")))
+        Assert.True(File.Exists(Path.Combine(fullDir, "A", "A.fsproj"))))

@@ -8,6 +8,7 @@ type Arguments =
     | [<AltCommandLine("-o")>] Output_Dir of dir: string
     | [<AltCommandLine("-s")>] Solution of path: string
     | Clean
+    | Restore
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -16,6 +17,7 @@ type Arguments =
             | Output_Dir _ -> "output directory (default: ./<ProjectName>)"
             | Solution _ -> "solution file to use, overriding auto-discovery (FR-8)"
             | Clean -> "delete and recreate the output directory instead of merging into it"
+            | Restore -> "emit only the files `dotnet restore` needs, for a cacheable Docker restore layer"
 
 let private describeSolutionSource (source: SolutionDiscovery.SolutionRootSource) =
     match source with
@@ -34,7 +36,7 @@ let main argv =
                 { ProjectPaths = results.GetResult(Project_Paths)
                   OutputDir = results.TryGetResult(Output_Dir)
                   SolutionPath = results.TryGetResult(Solution)
-                  RestoreOnly = false
+                  RestoreOnly = results.Contains(Restore)
                   Clean = results.Contains(Clean) }
 
         // FR-8: always report which solution was used, since more than one solution can
