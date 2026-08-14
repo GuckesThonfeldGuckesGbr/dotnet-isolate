@@ -27,6 +27,7 @@
         <Compile Include="FileResolutionIo.fs"/>
         <Compile Include="Phase.fs"/>
         <Compile Include="Pipeline.fs"/>
+        <Compile Include="Report.fs"/>
     </ItemGroup>
 
 </Project>

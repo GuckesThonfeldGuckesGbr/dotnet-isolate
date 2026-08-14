@@ -50,19 +50,8 @@ let main argv =
 
         printfn $"Link strategy: {result.Strategy}"
 
-        for entry in result.ExcludedUnderOutput do
-            eprintfn $"warning: ignoring {entry}, which lives under the output directory"
-
-        for entry in result.StaleEntries do
-            eprintfn $"warning: {entry} was already in the output directory and was not produced by this run"
-
-        for entry in result.MissingFiles do
-            eprintfn $"warning: {entry} is referenced by a project but does not exist; skipped"
-
-        // result.SolutionRoot is always Some here when this list is non-empty (see Pipeline.fs).
-        for entry in result.EntriesOutsideDiscoveredSolution do
-            eprintfn
-                $"warning: {entry} lies outside the discovered solution ({result.SolutionRoot.Value.SolutionFile}); the generated solution file may not include it"
+        for warning in Report.warnings result do
+            eprintfn $"{warning}"
 
         0
     with

@@ -21,6 +21,7 @@
         <Compile Include="SolutionFileTests.fs"/>
         <Compile Include="SolutionFileXmlTests.fs"/>
         <Compile Include="BuildArtifactsTests.fs"/>
+        <Compile Include="ReportTests.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
 
