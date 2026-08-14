@@ -22,6 +22,9 @@ type IsolateResult =
       /// Resolved inputs dropped because they live under the output directory - almost always a
       /// previous run's output swept up by MSBuild's implicit globs.
       ExcludedUnderOutput: string list
+      /// Resolved inputs dropped because they are generated build artifacts rather than build
+      /// inputs (FR-15) - a previous host-side build's `obj/`, `bin/`, `node_modules/`, and so on.
+      ExcludedArtifacts: string list
       /// Entries already in the output directory that this run did not produce.
       StaleEntries: string list
       /// Item-derived paths referenced by a project that do not exist on disk, dropped rather than
@@ -61,7 +64,8 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // because ProjectGraph.resolve evaluates each BFS level's projects in parallel.
     let evaluationCache = ConcurrentDictionary<string, Map<string, string list> * Map<string, string>>()
     let allItemTypes = "ProjectReference" :: FileResolutionIo.fileItemTypes
-    let allPropertyNames = FileResolutionIo.filePathPropertyNames
+    let allPropertyNames =
+        FileResolutionIo.filePathPropertyNames @ FileResolutionIo.outputDirectoryPropertyNames
 
     let evaluateCached (projectPath: string) =
         evaluationCache.GetOrAdd(projectPath, (fun p -> MsBuild.getItemsAndProperties p allItemTypes allPropertyNames))
@@ -113,6 +117,26 @@ let isolate (options: IsolateOptions) : IsolateResult =
         ImplicitFiles.resolveForProjects ImplicitFilesIo.filesOnDisk ceiling projectDirs
 
     let allFiles = (projectFiles @ implicitFiles) |> List.distinct
+
+    // FR-15: drop generated build artifacts before anything downstream can see them. MSBuild has
+    // no reason to distinguish them - a project whose directory contains other projects globs
+    // their bin/obj in through the SDK's default items, and a hand-written `<None Include="**/*"/>`
+    // bypasses DefaultItemExcludes entirely - so the filter works on resolved paths and covers
+    // both mechanisms alike.
+    //
+    // Placed here, ahead of the output-directory partition and the mirror root, for the same
+    // reason FR-14's missing-file drop is: an artifact must not inflate the mirror root (FR-2),
+    // which any resolved path above the projects does, nor count toward OutputSafety.validate's
+    // "contains every resolved input file" check.
+    let declaredOutputDirectories =
+        projects
+        |> List.collect (fun p -> FileResolution.resolveOutputDirectories (getPropertiesCached p) p)
+        |> List.distinct
+
+    let artifactPartition =
+        BuildArtifacts.partition BuildArtifactsIo.containsProjectFile declaredOutputDirectories allFiles
+
+    let allFiles = artifactPartition.Kept
 
     // Checked here, before the output-directory partition below, so this failure keeps reporting
     // its own cause (nothing resolved at all) instead of being masked by OutputSafety.validate's
@@ -223,6 +247,7 @@ let isolate (options: IsolateOptions) : IsolateResult =
       SolutionRoot = solutionRoot
       Strategy = strategy
       ExcludedUnderOutput = partition.ExcludedUnderOutput
+      ExcludedArtifacts = artifactPartition.Excluded
       StaleEntries = staleEntries
       MissingFiles = resolvedProjectFiles.MissingItemFiles
       EntriesOutsideDiscoveredSolution = entriesOutsideDiscoveredSolution }

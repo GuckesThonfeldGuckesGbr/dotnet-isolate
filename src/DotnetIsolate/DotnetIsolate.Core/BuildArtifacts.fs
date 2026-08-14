@@ -48,9 +48,13 @@ let private equalsIgnoreCase (a: string) (b: string) =
 /// `declaredOutputDirectories` is rule D: absolute directories MSBuild itself named as output
 /// (`ArtifactsPath`, `BaseOutputPath`, `BaseIntermediateOutputPath`). It exists because the
 /// `UseArtifactsOutput` layout relocates everything to a repo-root `artifacts/` tree whose
-/// `bin`/`obj` directories have no project file beside them, so rule A cannot see them - and
-/// because those paths sit *above* the projects, letting them through would raise the mirror
-/// root (FR-2) and shift every path in the output, not merely leak files.
+/// `bin`/`obj` directories have no project file beside them, so rule A cannot see them.
+///
+/// Rule D only ever fires on paths a *hand-written* glob resolved. With `UseArtifactsOutput` on,
+/// the SDK puts the entire `$(ArtifactsPath)/**` into DefaultItemExcludes - not merely the
+/// evaluating project's own subdirectory - so the default globs never produce these paths
+/// (verified directly). That is not a reason to drop the rule: a `<None Include="**/*"/>` carries
+/// no such exclusion, and that glob is the same mechanism that motivates rule A.
 let isBuildArtifact
     (containsProjectFile: ContainsProjectFile)
     (declaredOutputDirectories: string list)
