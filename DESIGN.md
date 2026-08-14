@@ -94,6 +94,35 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
    still earns its place — it finds `.editorconfig` files nested *inside* a project, which a
    walk-up from the project directory never looks at.
 
+   **Generated build artifacts have to be filtered back out (FR-15).** MSBuild has no reason to
+   distinguish a source file from a `project.assets.json`, and three separate mechanisms put
+   `obj/` and `bin/` contents into the resolved set. All three were verified directly against
+   SDK 10.0.302, and the filter (`BuildArtifacts`) works on *resolved paths* precisely so that it
+   covers all of them without caring which one applied.
+
+   - **A project whose directory contains other projects globs their output in.**
+     `DefaultItemExcludes` is `$(BaseOutputPath)/**;$(BaseIntermediateOutputPath)/**` resolved
+     relative to the *evaluating* project, so it excludes only that project's own `bin`/`obj`. A
+     root-level project therefore collects `App/obj/project.assets.json`,
+     `App/obj/Debug/net8.0/App.AssemblyInfo.cs`, `App/bin/Debug/net8.0/App.dll` and the rest.
+   - **A hand-written glob carries no exclusions at all.** Only the SDK's *default* item globs
+     apply `DefaultItemExcludes`. A `<None Include="**/*"/>` or
+     `<Content Include="**/*.json" CopyToOutputDirectory="PreserveNewest"/>` authored in a
+     `.csproj` or `Directory.Build.props` collects `obj/` contents even for a leaf project that
+     contains no other project.
+   - **`UseArtifactsOutput` relocates output beyond the reach of a path rule.** Output moves to a
+     repo-root `artifacts/` tree whose `bin`/`obj` directories have no project file beside them, so
+     the anchored rule cannot recognise them; `ArtifactsPath` (FR-15 rule 4) is what catches them.
+     Note the asymmetry found while testing: with the artifacts layout on, the SDK puts the
+     *entire* `$(ArtifactsPath)/**` into `DefaultItemExcludes` — not merely the evaluating
+     project's own subdirectory — so the default globs never leak it, and rule 4 only ever fires on
+     paths a hand-written glob resolved. It stays because that glob is the same mechanism as above.
+
+   One thing checked and found *not* to be a leak path: the generated
+   `obj/<config>/<tfm>/*.GeneratedMSBuildEditorConfig.editorconfig` is added by a target rather
+   than at evaluation, so `-getItem:EditorConfigFiles` never returns it. FR-10's ancestor-globbed
+   item type needs no artifact handling of its own.
+
    All of this is what makes FR-4 correct in the face of SDK-style implicit globs,
    `Directory.Build.props`-injected items, and conditions, without hand-replicating MSBuild's
    globbing/condition semantics (an alternative that was considered and rejected — see below).

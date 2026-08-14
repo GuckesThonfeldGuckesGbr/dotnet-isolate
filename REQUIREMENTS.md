@@ -34,8 +34,9 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   inside the current directory). With more than one entry project (FR-13) there is no single project
   name to default to, so `-o`/`--output-dir` is required rather than guessed.
 - **FR-7** — If the output folder already exists, the tool merges into it: files are placed over
-  whatever is there, nothing is deleted, and every entry the run did not itself produce is reported
-  to the user. `--clean` (FR-12) restores delete-and-recreate for callers who need the output to
+  whatever is there, nothing is deleted, and the number of entries the run did not itself produce
+  is reported to the user (a count, not a list — a merge into a populated directory otherwise emits
+  hundreds of lines carrying one bit of information). `--clean` (FR-12) restores delete-and-recreate for callers who need the output to
   contain exactly the isolated set. Deletion was previously the default and was reversed because it
   is destructive: with `-o` pointing at the solution root, the tool deleted the entire source tree
   and only then failed. Two further guards follow from the same incident — before any filesystem
@@ -107,6 +108,29 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   Property-derived paths (FR-9) continue to be dropped *silently*: a property is a scalar any SDK
   may default to a path never meant to exist, whereas an item was authored by someone and a missing
   one is worth reporting.
+- **FR-15** — Generated build artifacts are excluded from the resolved set, because they are not
+  build inputs and actively defeat the tool's purpose: `project.assets.json` and `*.nuget.g.props`
+  embed absolute *host* paths that are wrong inside a container, `obj/**` caches can make the
+  container's build believe it is already up to date, and every host-side rebuild rewrites them —
+  changing the isolated output's bytes, changing the `COPY --from` cache key (DI-1), and rerunning
+  restore for no source change. On a fresh CI clone none of this exists, which is why it shows up
+  as a developer-machine problem. Four rules, applied to resolved paths before the mirror root is
+  computed (FR-2) so no artifact can inflate it:
+  1. a `bin`, `obj` or `TestResults` directory *whose parent holds a project file* — the anchor is
+     what makes the rule safe, keeping a checked-in `tools/bin/build.sh` out of it;
+  2. a `node_modules` directory anywhere, on the same reasoning that excludes the `Analyzer` and
+     `Reference` item types (FR-4): it is restored inside the container from a manifest;
+  3. `*.binlog`, `*.coverage`, `*.cobertura.xml` and `coverage.*.xml`;
+  4. anything under a directory MSBuild itself declared as output via `ArtifactsPath`,
+     `BaseOutputPath` or `BaseIntermediateOutputPath`.
+
+  Rules 1 and 4 are both needed because they are blind in opposite directions. Rule 1 cannot see
+  output relocated by `UseArtifactsOutput`, whose `bin`/`obj` sit under a repo-root `artifacts/`
+  with no project file beside them; rule 4 can only name the output directories of projects in the
+  closure, while the artifacts that leak most often belong to projects outside it — and
+  `ArtifactsPath` is repo-wide, so reading it from a closure project covers the others too.
+  A file genuinely checked in under a project's own `bin`/`obj` is dropped; this is accepted, and
+  the number of exclusions is reported. The count, not the list: exclusions arrive in bulk.
 
 ## Performance
 

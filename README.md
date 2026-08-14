@@ -14,6 +14,12 @@ the original untouched. The result is a small Docker build context whose layer c
 - `--restore` — emit only the files `dotnet restore` reads, for the split below
 - `--clean` — delete the output directory first, instead of merging into it
 
+Generated build artifacts are left behind: `bin/` and `obj/` next to a project file, `node_modules/`,
+build logs and coverage reports, and anything under an `ArtifactsPath`. MSBuild resolves them as
+ordinary items — a project whose directory contains other projects globs their output in, and a
+hand-written `<None Include="**/*"/>` bypasses the SDK's exclusions entirely — but they are rewritten
+on every local build, so shipping them would bust the layer cache the tool exists to protect.
+
 Defaults, warnings and output-directory safety: [REQUIREMENTS.md](REQUIREMENTS.md). File resolution
 and layout: [DESIGN.md](DESIGN.md).
 

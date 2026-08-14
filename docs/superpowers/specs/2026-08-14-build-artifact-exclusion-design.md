@@ -65,9 +65,25 @@ BaseIntermediateOutputPath = <repo>/artifacts/obj/App/
 ```
 
 Rule A cannot see these: the `bin`/`obj` segment's parent is `artifacts/`, which holds no project
-file. The consequence is worse than leaked files. `artifacts/` sits *above* the projects, so those
-paths raise the common ancestor in `MirrorRoot.compute` (FR-2) and **every path in the output
-changes** — a total cache miss on every file, not a partial one.
+file.
+
+**Corrected during implementation.** This section originally claimed the artifacts layout also
+raises the mirror root, shifting every output path. That does not survive testing, and the rule's
+justification is narrower than first written:
+
+- With `UseArtifactsOutput` on, `DefaultItemExcludes` contains the *entire* `<repo>/artifacts/**`,
+  not merely the evaluating project's own subdirectory. Verified by reading the property back: the
+  default globs never resolve the artifacts tree at all, for any project.
+- Rule D therefore only ever fires on paths a *hand-written* glob resolved — confirmed by adding
+  `<None Include="**/*.json"/>` to a root project, which promptly resolved
+  `artifacts/obj/App/project.assets.json`.
+- And in that layout the mirror root does not move: the project carrying the glob sits at the repo
+  root, which already anchors the mirror root there.
+
+Rule D still earns its place — the leaked `project.assets.json` is rewritten on every host build,
+which is the cache thrash this whole change is about — but for that reason, not for mirror-root
+inflation. The filter's *placement* before `MirrorRoot.compute` remains correct on the general
+principle that any resolved path above the projects raises the root.
 
 **The generated `.editorconfig` does not leak.** `obj/<config>/<tfm>/*.GeneratedMSBuildEditorConfig
 .editorconfig` is added by a target, not at evaluation, so `-getItem:EditorConfigFiles` never
@@ -118,7 +134,8 @@ rather than standing alone precisely because it is created next to a test projec
 each covers the other's blind spot.
 
 - A path rule is blind to *relocated* output: `UseArtifactsOutput` moves everything under a
-  repo-root `artifacts/` whose `bin`/`obj` segments have no project file beside them.
+  repo-root `artifacts/` whose `bin`/`obj` segments have no project file beside them (reachable
+  only through a hand-written glob — see the correction above).
 - An MSBuild-derived rule is blind to projects *outside the closure*: it can only name the output
   directories of projects it evaluates, and the reported failure involves artifacts belonging to
   projects the closure never touches.
@@ -220,9 +237,9 @@ Both lines are suppressed entirely when their count is zero.
 
 **Integration:** build a fixture solution so real `obj/`/`bin/` exist, isolate it, and assert the
 output tree contains no `obj` or `bin` directory and that the file count dropped accordingly. A
-second fixture sets `UseArtifactsOutput` in `Directory.Build.props` and asserts both that nothing
-under `artifacts/` reaches the output and — the consequence that actually costs the cache — that
-the mirror root is unchanged from the non-artifacts case, so output paths do not shift.
+second fixture sets `UseArtifactsOutput` in `Directory.Build.props` **and gives the root project a
+hand-written glob**, without which the artifacts tree is never resolved and the test is vacuous —
+as the first version of it was, passing with rule D disabled.
 
 **CLI:** the two summary lines appear with correct counts, and are absent at zero.
 
