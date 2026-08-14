@@ -138,3 +138,59 @@ let ``isolate excludes the artifacts layout, which only rule D can see`` () =
         Assert.True(File.Exists(Path.Combine(outputDir, "Directory.Build.props")))
 
         Assert.Contains(result.ExcludedArtifacts, fun (f: string) -> f.EndsWith("project.assets.json")))
+
+/// The console report over a real run, rather than a hand-built result record: one project whose
+/// hand-written glob resolves an artifact, a declared file that is not on disk, and an output
+/// directory that already holds a resolved input. Asserting the lines here keeps the CLI's only
+/// account of what it silently dropped tied to what the pipeline actually reports.
+[<Fact>]
+let ``the report summarises artifacts and stale entries and lists the rest per file`` () =
+    withTempDir (fun root ->
+        let projectDir = Path.Combine(root, "A")
+        Directory.CreateDirectory(projectDir) |> ignore
+
+        File.WriteAllText(
+            Path.Combine(projectDir, "A.fsproj"),
+            """<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.fs"/>
+    <None Include="**/*.json"/>
+    <None Include="missing.txt"/>
+  </ItemGroup>
+</Project>
+"""
+        )
+
+        File.WriteAllText(Path.Combine(projectDir, "Program.fs"), "module A.Program\n")
+        File.WriteAllText(Path.Combine(projectDir, "appsettings.json"), "{}")
+
+        Directory.CreateDirectory(Path.Combine(projectDir, "obj")) |> ignore
+        File.WriteAllText(Path.Combine(projectDir, "obj", "project.assets.json"), "{}")
+
+        // The output directory already holds a file the glob resolves: both a pre-existing entry
+        // this run did not produce, and a resolved input living under the output.
+        let outputDir = Path.Combine(projectDir, "out")
+        Directory.CreateDirectory(outputDir) |> ignore
+        File.WriteAllText(Path.Combine(outputDir, "leftover.json"), "{}")
+
+        let result =
+            Pipeline.isolate
+                { ProjectPaths = [ Path.Combine(projectDir, "A.fsproj") ]
+                  OutputDir = Some outputDir
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
+
+        let warnings = Report.warnings result
+
+        Assert.Contains(warnings, fun (w: string) -> w.StartsWith("note:") && w.Contains("build artifact"))
+        Assert.Contains(warnings, fun (w: string) -> w.Contains("was not clean") && w.Contains("--clean"))
+        Assert.Contains(warnings, fun (w: string) -> w.Contains("lives under the output directory"))
+        Assert.Contains(warnings, fun (w: string) -> w.Contains("missing.txt") && w.Contains("does not exist"))
+
+        // The bulk categories are one line each, however many entries they carry.
+        Assert.Equal(1, warnings |> List.filter (fun w -> w.Contains("build artifact")) |> List.length)
+        Assert.Equal(1, warnings |> List.filter (fun w -> w.Contains("was not clean")) |> List.length))
