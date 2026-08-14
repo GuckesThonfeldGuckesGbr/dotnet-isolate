@@ -51,6 +51,29 @@ Both mechanisms produce the same *resolved paths*, which is why the rule below f
 rather than on the item type, the defining project, or the glob that produced it. It is correct
 regardless of how the file arrived.
 
+**`UseArtifactsOutput` relocates everything out of reach of a path rule.** .NET 8's artifacts
+layout — a checkbox in both Rider and Visual Studio — puts all output under a repo-root `artifacts/`
+tree. Verified:
+
+```
+artifacts/obj/App/project.assets.json      artifacts/bin/App/debug/App.dll
+artifacts/obj/App/debug/ref/App.dll        artifacts/obj/App/debug/refint/App.dll
+
+ArtifactsPath              = <repo>/artifacts
+BaseOutputPath             = <repo>/artifacts/bin/App/
+BaseIntermediateOutputPath = <repo>/artifacts/obj/App/
+```
+
+Rule A cannot see these: the `bin`/`obj` segment's parent is `artifacts/`, which holds no project
+file. The consequence is worse than leaked files. `artifacts/` sits *above* the projects, so those
+paths raise the common ancestor in `MirrorRoot.compute` (FR-2) and **every path in the output
+changes** — a total cache miss on every file, not a partial one.
+
+**The generated `.editorconfig` does not leak.** `obj/<config>/<tfm>/*.GeneratedMSBuildEditorConfig
+.editorconfig` is added by a target, not at evaluation, so `-getItem:EditorConfigFiles` never
+returns it (verified: the item is empty for a leaf project). FR-10's ancestor-globbed item type is
+not a path for artifacts to arrive by, and needs no special handling.
+
 **The SDK already excludes more than expected.** Dot-directories (`.git/`, `.vs/`, `.idea/`, via
 `DefaultExcludesInProjectFolder`) and `*.user` files never appear in the resolved set. No rule is
 needed for them.
@@ -73,27 +96,45 @@ boundary that matters is the `COPY --from` below it — but it means a `.dockeri
 
 ### The rule (new requirement FR-15)
 
-A resolved input is dropped when any of three rules matches. Rules A and B are path-segment rules;
-C is a filename rule.
+A resolved input is dropped when any of four rules matches. A and B are path-segment rules, C is a
+filename rule, D is a directory-containment rule.
 
 | Rule | Fires on a path segment / name | Anchor |
 |---|---|---|
 | A | `bin`, `obj`, or `TestResults` | the segment's parent directory contains a `*.csproj`, `*.fsproj` or `*.vbproj` |
 | B | `node_modules` | none |
 | C | `*.binlog`, `*.coverage`, `*.cobertura.xml`, `coverage.*.xml` | none |
+| D | the file lies under any closure project's evaluated `ArtifactsPath`, `BaseOutputPath` or `BaseIntermediateOutputPath` | n/a — the directories come from MSBuild |
 
 Segment and name comparison is case-insensitive (`OrdinalIgnoreCase`), consistent with
-`MirrorRoot.isUnder`.
+`MirrorRoot.isUnder`, which rule D also uses for containment.
 
 **Why rule A is anchored.** The anchor is what makes it safe: `Web/bin/Debug/net8.0/Web.dll` is
 dropped because `Web/` holds `Web.csproj`, while a checked-in `tools/bin/build.sh` or a test-fixture
 directory named `TestResults/` with no project file beside it survives. `TestResults` folds into A
 rather than standing alone precisely because it is created next to a test project.
 
-**Why rule A is not derived from MSBuild.** Querying each project's `BaseIntermediateOutputPath`,
-`BaseOutputPath` and `ArtifactsPath` would be exact for the projects in the closure, and blind to
-every project outside it — which is the root-level-project case that produced the report. The
-path-based rule covers both, and costs no additional MSBuild evaluation.
+**Why A and D coexist rather than one replacing the other.** They fail in opposite directions, and
+each covers the other's blind spot.
+
+- A path rule is blind to *relocated* output: `UseArtifactsOutput` moves everything under a
+  repo-root `artifacts/` whose `bin`/`obj` segments have no project file beside them.
+- An MSBuild-derived rule is blind to projects *outside the closure*: it can only name the output
+  directories of projects it evaluates, and the reported failure involves artifacts belonging to
+  projects the closure never touches.
+
+Rule D is nonetheless sound for the relocated case even though it evaluates only closure projects,
+because `ArtifactsPath` is *repo-wide* — one value shared by every project in the tree — so reading
+it from any single closure project yields the correct directory for out-of-closure projects too.
+`BaseOutputPath` and `BaseIntermediateOutputPath` are per-project and carry no such guarantee; they
+are included because they cost nothing extra and cover hand-rolled overrides for closure projects,
+with rule A remaining the net for everything else.
+
+**Rule D costs no additional MSBuild evaluation.** `Pipeline.isolate` already makes exactly one
+`dotnet msbuild -getItem -getProperty` call per project and memoizes it. Rule D adds a second
+property-name list — directories to exclude — kept distinct from `filePathPropertyNames`, whose
+values are input *files* and are existence-checked (FR-9). Unset properties come back as empty
+strings and are ignored.
 
 **Why `node_modules` is dropped at all.** `DESIGN.md` already excludes the `Analyzer` and
 `Reference` item types on the grounds that they resolve into the SDK install and the NuGet cache,
@@ -114,7 +155,9 @@ directories are build output by universal convention, and the summary line below
 
 ### Where the filter runs
 
-In `Pipeline.isolate`, immediately after `allFiles` is assembled from project files plus implicit
+Rule D's directory list is collected from the memoized per-project evaluation of every closure
+project, so it is available as soon as step 2 has run. The filter itself runs in `Pipeline.isolate`,
+immediately after `allFiles` is assembled from project files plus implicit
 files, and **before** `OutputSafety.partitionInputs` and the mirror-root computation. This is the
 same position, for the same reason, as FR-14's missing-file drop: an artifact must not inflate the
 mirror root (FR-2) nor count toward `OutputSafety.validate`'s "the output directory contains every
@@ -126,9 +169,9 @@ Following the existing pure/IO split (`ImplicitFiles.fs` / `ImplicitFilesIo.fs`,
 explains the coverlet rationale — QP-5):
 
 - **`BuildArtifacts.fs`** (pure). `type ContainsProjectFile = string -> bool`;
-  `isBuildArtifact : ContainsProjectFile -> string -> bool`; and
-  `partition : ContainsProjectFile -> string list -> {| Kept: string list; Excluded: string list |}`.
-  Fully unit-testable against a fake predicate, with no disk access.
+  `isBuildArtifact : ContainsProjectFile -> string list -> string -> bool` (the `string list` being
+  rule D's excluded directories); and a `partition` over a file list returning kept and excluded.
+  Fully unit-testable against a fake predicate and a literal directory list, with no disk access.
 - **`BuildArtifactsIo.fs`** (IO). The real `ContainsProjectFile`, memoized in a
   `ConcurrentDictionary<string, bool>` so each candidate parent directory is enumerated once — a
   large repo hits the same `obj/` parent hundreds of times.
@@ -156,8 +199,10 @@ Both lines are suppressed entirely when their count is zero.
 - **FR-15** — new, stating the rule, the anchor, the rationale, and the accepted collateral.
 - **FR-7** — amended: "every entry the run did not itself produce is reported to the user" becomes a
   reported count.
-- **DESIGN.md** — the file-resolution section gains the two mechanisms above (sibling glob and
-  hand-written glob bypassing `DefaultItemExcludes`), since both are non-obvious and were verified.
+- **DESIGN.md** — the file-resolution section gains the three mechanisms above (sibling glob,
+  hand-written glob bypassing `DefaultItemExcludes`, and `UseArtifactsOutput` relocation), since all
+  three are non-obvious and were verified. The artifacts case is documented alongside FR-2's mirror
+  root, because its real cost is root inflation rather than the leaked files themselves.
 
 ## Testing
 
@@ -169,10 +214,15 @@ Both lines are suppressed entirely when their count is zero.
 - `node_modules/pkg/index.js` excluded with no anchor.
 - `*.binlog` / `coverage.cobertura.xml` excluded; `notes.md` kept.
 - Near-misses that must survive: `obj2/`, `binaries/`, `my.binlog.txt`.
+- Rule D: a file under a supplied `artifacts/` directory excluded; a sibling `artifacts2/` kept
+  (via `MirrorRoot.isUnder`, which compares segments); an empty directory list excluding nothing.
 - All paths built via `DotnetIsolate.UnitTests.PathHelpers.path` (POR-1).
 
 **Integration:** build a fixture solution so real `obj/`/`bin/` exist, isolate it, and assert the
-output tree contains no `obj` or `bin` directory and that the file count dropped accordingly.
+output tree contains no `obj` or `bin` directory and that the file count dropped accordingly. A
+second fixture sets `UseArtifactsOutput` in `Directory.Build.props` and asserts both that nothing
+under `artifacts/` reaches the output and — the consequence that actually costs the cache — that
+the mirror root is unchanged from the non-artifacts case, so output paths do not shift.
 
 **CLI:** the two summary lines appear with correct counts, and are absent at zero.
 
