@@ -49,6 +49,19 @@ let filePathPropertyNames =
       "Win32Resource"
       "Win32Manifest" ]
 
+/// MSBuild *properties* naming a *directory* that holds generated build output (FR-15 rule D).
+/// Distinct from `filePathPropertyNames`, whose values are input files and are existence-checked:
+/// these are directories, they need not exist yet, and everything under them is excluded.
+///
+/// `ArtifactsPath` is the one that matters most, and the reason this list exists at all. Under
+/// `UseArtifactsOutput` every project's output moves to a repo-root `artifacts/` tree whose
+/// `bin`/`obj` directories have no project file beside them, so BuildArtifacts' path-anchored
+/// rules cannot see it. It is also *repo-wide* - one value shared by every project - so reading it
+/// from the projects in the closure yields the correct directory for projects outside it too,
+/// which is exactly what a per-project property cannot do.
+let outputDirectoryPropertyNames =
+    [ "ArtifactsPath"; "BaseOutputPath"; "BaseIntermediateOutputPath" ]
+
 /// Resolves a project's MSBuild items (item type -> absolute paths).
 type ProjectItemsResolver = string -> Map<string, string list>
 
@@ -92,6 +105,25 @@ let resolvePropertyFiles (fileExists: string -> bool) (properties: Map<string, s
     |> List.filter (fun value -> value <> "")
     |> List.map (fun value -> Path.GetFullPath(value, projectDir))
     |> List.filter fileExists
+
+/// Resolves `outputDirectoryPropertyNames` to absolute directories for one project (FR-15 rule D).
+/// Values may be relative (`bin\`) or already absolute (`ArtifactsPath` evaluates absolute), so
+/// each is made absolute against the project's own directory, exactly as `resolvePropertyFiles`
+/// does - and for the same reason `projectPath` must be *fully qualified*, not merely rooted.
+///
+/// Unlike the file properties, these are *not* existence-checked: a clean tree has no output
+/// directory yet, and excluding paths under a directory that does not exist is a harmless no-op.
+/// The trailing separator MSBuild leaves on `BaseOutputPath` is trimmed so the value is stored in
+/// one canonical spelling, matching how Pipeline normalises the output directory.
+let resolveOutputDirectories (properties: Map<string, string>) (projectPath: string) : string list =
+    let projectDir = Path.GetDirectoryName(projectPath: string)
+
+    outputDirectoryPropertyNames
+    |> List.choose (fun name -> properties |> Map.tryFind name)
+    |> List.map (fun value -> value.Trim())
+    |> List.filter (fun value -> value <> "")
+    |> List.map (fun value -> Path.TrimEndingDirectorySeparator(Path.GetFullPath(value, projectDir)))
+    |> List.distinct
 
 /// A project's resolved files, plus the item-derived paths that were dropped because nothing is
 /// there on disk.

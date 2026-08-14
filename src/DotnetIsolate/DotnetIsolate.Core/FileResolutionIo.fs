@@ -16,6 +16,9 @@ let fileItemTypes = FileResolution.fileItemTypes @ FileResolution.ancestorGlobbe
 /// The MSBuild properties whose values point at build-relevant input files (FR-9).
 let filePathPropertyNames = FileResolution.filePathPropertyNames
 
+/// The MSBuild properties naming directories of generated build output (FR-15 rule D).
+let outputDirectoryPropertyNames = FileResolution.outputDirectoryPropertyNames
+
 /// A `FileResolution.ProjectItemsResolver` backed by real MSBuild evaluation.
 let projectItemsResolver: FileResolution.ProjectItemsResolver =
     fun projectPath -> MsBuild.getItems projectPath fileItemTypes

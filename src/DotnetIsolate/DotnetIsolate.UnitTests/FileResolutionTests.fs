@@ -314,3 +314,34 @@ let ``resolveAllFiles unions files and missing reports across projects`` () =
     Assert.Contains(projectB, result.Files)
     // Deduplicated: both projects reported the same missing file.
     Assert.Equal<string list>([ missing ], result.MissingItemFiles)
+
+// FR-15 rule D: the directories MSBuild itself declares as output.
+
+[<Fact>]
+let ``resolveOutputDirectories makes relative output paths absolute against the project`` () =
+    let projectPath = PathHelpers.path [ "repo"; "App"; "App.fsproj" ]
+
+    let properties =
+        Map.ofList [ "BaseOutputPath", "bin/"; "BaseIntermediateOutputPath", "obj/" ]
+
+    let result = resolveOutputDirectories properties projectPath
+
+    let expected =
+        [ PathHelpers.path [ "repo"; "App"; "bin" ]; PathHelpers.path [ "repo"; "App"; "obj" ] ]
+
+    Assert.Equal<string list>(expected, result)
+
+[<Fact>]
+let ``resolveOutputDirectories keeps an absolute artifacts path and drops unset properties`` () =
+    let projectPath = PathHelpers.path [ "repo"; "App"; "App.fsproj" ]
+    let artifacts = PathHelpers.path [ "repo"; "artifacts" ]
+
+    let properties =
+        Map.ofList
+            [ "ArtifactsPath", artifacts
+              "BaseOutputPath", ""
+              "BaseIntermediateOutputPath", "   " ]
+
+    let result = resolveOutputDirectories properties projectPath
+
+    Assert.Equal<string list>([ artifacts ], result)
