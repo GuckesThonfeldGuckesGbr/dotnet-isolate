@@ -21,6 +21,7 @@
         <Compile Include="DiamondWithIncludedFilesTests.fs"/>
         <Compile Include="PipelineTests.fs"/>
         <Compile Include="DeterminismTests.fs"/>
+        <Compile Include="BuildArtifactsTests.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
 
