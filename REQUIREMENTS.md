@@ -226,7 +226,10 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   2. A file changed **inside** the isolated closure must still leave `RUN dotnet restore` `CACHED`
      while the build layer reruns — the property the whole `--restore` split (FR-11, DI-1) rests on,
      and one the first case says nothing about.
-  Both are asserted against real buildx builds. The classic builder is no longer exercised, since
+  3. A changed **build artifact** (FR-15) reruns the bind-mounted isolate step — BuildKit keys a
+     `RUN --mount=type=bind` off the whole mounted subtree, not the process's read-set — while
+     restore/build/publish stay cached, because the artifact never reaches the isolated output.
+  All three are asserted against real buildx builds. The classic builder is no longer exercised, since
   DI-1 no longer claims to support it. The suite requires a Docker daemon, so it is not part of the
   coverage gates in QP-4/QP-5.
 

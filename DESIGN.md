@@ -310,6 +310,13 @@ while the build layer reruns.
 `RUN --mount=type=bind,target=/src`. `COPY . /src` would pull the entire build context into that
 stage's layers — precisely the cost the tool exists to avoid — whereas the mount is read-only and
 transient, which is all the tool needs: it reads the source and writes only to its output directory.
+
+The mount does not, however, make the isolate stage itself cheap to cache: BuildKit digests the
+mounted subtree up front rather than narrowing the key to what the process actually read, so any
+change anywhere under the context — including a `bin/`/`obj/` write the tool never opens — reruns
+the stage (measured, and asserted by QP-12's third case). That is affordable because the stage is
+seconds of work and the `COPY --from` boundary below it still holds, but it is why a `.dockerignore`
+covering `bin/` and `obj/` complements FR-15 rather than being made redundant by it.
 The price is buildx: the classic builder has no bind mounts, so DI-1's earlier "works under any
 builder" guarantee is dropped, along with the two patterns that carried it (the `COPY . /src`
 self-contained one and the host-side one). Hardlinking across the mount fails, and REL-2's upfront

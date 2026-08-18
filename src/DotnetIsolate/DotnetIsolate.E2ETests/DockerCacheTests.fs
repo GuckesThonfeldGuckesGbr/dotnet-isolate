@@ -123,6 +123,82 @@ let ``host-side pattern is cache-hit on rebuild after an unrelated change`` () =
         deleteIfExists outputDir1
         deleteIfExists outputDir2
 
+/// A hand-written glob that sweeps the intermediate output tree into the resolved set - FR-15's
+/// motivating case, and a common real-world pattern (copying config JSON alongside the binaries).
+/// The SDK's own default excludes keep `obj/` out of the *implicit* globs, so without this the
+/// artifact below is never a resolved input at all and the assertions become vacuous.
+/// The bind-mounted isolate step of the TwoPhase Dockerfile, identified by its full command.
+let private isolateStepNeedle =
+    "dotnet isolate /src/ServiceA/ServiceA.csproj -o /isolated/full"
+
+/// LF, matching the fixture it is spliced into - the repository is LF everywhere per .gitattributes.
+let private artifactSweepingGlob =
+    "  <ItemGroup>\n    <None Include=\"**\\*.json\" CopyToOutputDirectory=\"PreserveNewest\" />\n  </ItemGroup>\n\n"
+
+/// Inserts `artifactSweepingGlob` into a copied fixture's project file, ahead of its first
+/// ItemGroup. Mutates the temp copy only; the tracked fixture is shared with other suites.
+let private addArtifactSweepingGlob (csprojPath: string) =
+    let text = File.ReadAllText(csprojPath)
+    let anchor = text.IndexOf("  <ItemGroup>")
+    Assert.True((anchor >= 0), $"no ItemGroup to anchor the glob to in {csprojPath}")
+    File.WriteAllText(csprojPath, text.Insert(anchor, artifactSweepingGlob))
+
+/// FR-15 end to end, and the one claim in the design spec that was belief rather than test:
+/// BuildKit does *not* narrow a `RUN --mount=type=bind` cache key by the process's actual read-set.
+/// Changing a file the tool never opens - here a generated `obj/project.assets.json` - still
+/// invalidates the isolate stage, because BuildKit digests the whole mounted subtree up front.
+///
+/// That is conceded and harmless, and this test pins both halves of why: the isolate stage reruns,
+/// but the `COPY --from` boundary below it holds, because FR-15 drops the artifact from the
+/// resolved set and so the isolated output's bytes are unchanged. Without FR-15 the glob above
+/// would carry `project.assets.json` into the output and bust every downstream layer.
+[<Fact>]
+let ``a changed build artifact reruns the isolate stage but not the layers below it`` () =
+    let contextDir = copyFixtureToTempDir fixtureSourceDir
+    let tag = $"dotnet-isolate-e2e-artifact-{Guid.NewGuid():N}"
+    let artifactPath = Path.Combine(contextDir, "ServiceA", "obj", "project.assets.json")
+
+    try
+        addArtifactSweepingGlob (Path.Combine(contextDir, "ServiceA", "ServiceA.csproj"))
+        Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)) |> ignore
+        File.WriteAllText(artifactPath, $"{{ \"e2e\": \"{Guid.NewGuid():N}\" }}")
+
+        packLocalTool toolProjectPath (Path.Combine(contextDir, "nupkg"))
+
+        let exitCode1, output1 = runDockerBuild true contextDir twoPhaseDockerfile tag
+        Assert.True((exitCode1 = 0), $"first build failed:\n{output1}")
+
+        // Only the generated artifact changes - no source file is touched.
+        File.WriteAllText(artifactPath, $"{{ \"e2e\": \"{Guid.NewGuid():N}\" }}")
+
+        let exitCode2, output2 = runDockerBuild true contextDir twoPhaseDockerfile tag
+        Assert.True((exitCode2 = 0), $"second build failed:\n{output2}")
+
+        // Sanity: the glob really did sweep the artifact in and FR-15 really did drop it again -
+        // otherwise the cache-hit assertion below would hold for the boring reason that the
+        // artifact was never a resolved input in the first place.
+        Assert.Contains("skipped 1 generated build artifact(s)", output2)
+
+        // The previously unverified claim: the bind mount's cache key covers the whole mounted
+        // subtree, not just what the tool read, so the isolate stage reruns regardless.
+        // `stepNotCached` also answers true for a step it cannot find, so pin the needle first -
+        // a Dockerfile edit must fail this test rather than silently hollow it out.
+        Assert.Contains(isolateStepNeedle, output2)
+
+        Assert.True(
+            stepNotCached true output2 isolateStepNeedle,
+            $"expected the bind-mounted isolate step to rerun after a build-artifact change:\n{output2}"
+        )
+
+        // FR-15's payoff: the output bytes are identical, so the boundary that matters holds.
+        Assert.True(
+            expensiveLayersCached true output2,
+            $"expected restore/build/publish layers to cache-hit despite the artifact change:\n{output2}"
+        )
+    finally
+        removeImage tag
+        deleteIfExists contextDir
+
 /// The property the whole --restore feature rests on: a change to a file *inside* the isolated
 /// closure must still leave `dotnet restore` cache-hit, because the restore half of the output
 /// contains no sources and is therefore byte-identical. The other tests here change a file

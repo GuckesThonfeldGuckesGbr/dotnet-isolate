@@ -62,6 +62,9 @@ just your app's runtime image — pick the base it needs, nothing about the cach
 - The read-only **bind mount replaces `COPY . /src`**, keeping the whole build context out of the
   isolate stage's layers — the cost the tool exists to avoid.
 - **Hardlinking across the bind mount fails**; one upfront probe detects that and copies instead.
+- **Add a `.dockerignore` for `bin/` and `obj/`.** The tool already keeps build artifacts out of the
+  isolated output, but BuildKit keys the bind mount off the whole mounted subtree, so a local build
+  before `docker build` still reruns the isolate stage. The layers below it stay cached either way.
 - **Paths are relative to the computed mirror root**, not always the solution root — a file
   referenced from outside the solution folder raises it. Look at the output before writing your
   `COPY` and `publish` paths.

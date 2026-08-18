@@ -102,11 +102,16 @@ the same reproduction: `node_modules/**`, `TestResults/**`, `packages/**`, `*.bi
 *after* MSBuild evaluation, so the dropped files are never opened — the tool's read-set shrinks
 rather than grows. The only added I/O is one `readdir` per candidate parent directory, all of which
 MSBuild already walked. Whether BuildKit narrows a `RUN --mount=type=bind` cache key by the
-process's actual read-set is **not verified**; the belief is that it digests the mounted subtree up
-front, which would mean the isolate stage's own key still moves when `obj/` changes on the host.
+process's actual read-set is now **verified, and it does not**: it digests the mounted subtree up
+front, so the isolate stage's own key still moves when `obj/` changes on the host. Measured against
+buildx 29.7.1 with the TwoPhase fixture — an identical rebuild caches the bind-mounted step, and
+rewriting nothing but `ServiceA/obj/project.assets.json` reruns it.
+
 That does not undermine this change — DI-1 already concedes the isolate stage reruns, and the
-boundary that matters is the `COPY --from` below it — but it means a `.dockerignore` covering
-`bin/` and `obj/` remains a complementary fix. See "Deferred" below.
+boundary that matters is the `COPY --from` below it, which held across the same pair of builds — but
+it does mean a `.dockerignore` covering `bin/` and `obj/` remains a complementary fix. Both halves
+are now pinned by `DockerCacheTests.a changed build artifact reruns the isolate stage but not the
+layers below it`.
 
 ## Design
 
@@ -252,7 +257,6 @@ under a directory whose project file is not in the isolated closure — follows 
 today, in the narrow case where the linked file's owning project is outside the closure. Revisit if
 a real repo shows unrelated project sources reaching the output.
 
-**E2E verification of the bind-mount cache key.** `DotnetIsolate.E2ETests` already drives real
-`docker build` runs and asserts cache-hit behaviour, so the unverified BuildKit claim above can be
-pinned with a test rather than left as belief. Deferred to keep this change focused; it changes no
-behaviour either way.
+**~~E2E verification of the bind-mount cache key.~~ Done** — no longer deferred. The claim above is
+now a test in `DotnetIsolate.E2ETests`, and the answer was the pessimistic one: BuildKit does not
+narrow the key by the read-set. See the amended paragraph above.
