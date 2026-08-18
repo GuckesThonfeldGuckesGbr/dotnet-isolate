@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786440327280,
+  "lastUpdate": 1787086021111,
   "repoUrl": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate",
   "entries": {
     "Benchmark": [
@@ -233,6 +233,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "OrchardCore.Cms.Web isolate: wall-clock time",
             "value": 42735,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "committer": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "distinct": true,
+          "id": "c1b5dfd384aba530271fdc09d4b4b13c8b631b4f",
+          "message": "test: stop asserting on a path's spelling in the FR-16 test\n\nThe owning directory comes back through MSBuild, so comparing it as a\nstring made the assertion hostage to separators and casing on Windows.\nAdds an alternate-separator case for closure membership, which is only\nmeaningful on the Windows leg.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T22:36:48+02:00",
+          "tree_id": "d422a598bfa95bb67849583f5b19946e23f2eb67",
+          "url": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate/commit/c1b5dfd384aba530271fdc09d4b4b13c8b631b4f"
+        },
+        "date": 1787086020592,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "OrchardCore.Cms.Web isolate: included files",
+            "value": 980,
+            "unit": "files"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: included projects",
+            "value": 198,
+            "unit": "projects"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: wall-clock time",
+            "value": 57694,
             "unit": "ms"
           }
         ]
