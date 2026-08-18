@@ -44,9 +44,11 @@ let ``isolate reports a file owned by a project outside the closure without drop
                   RestoreOnly = false
                   Clean = false }
 
-        // Reported, grouped under the owning project's directory.
+        // Reported, grouped under the owning project's directory. Compared with sameDirectory
+        // rather than string equality: this path came back through MSBuild, and asserting on its
+        // spelling would make the test hostage to separators and casing (see AGENTS.md).
         let group = result.ForeignProjectFiles |> List.exactlyOne
-        Assert.Equal(Path.Combine(root, "Foreign"), group.Directory)
+        Assert.True(MirrorRoot.sameDirectory (Path.Combine(root, "Foreign")) group.Directory)
         Assert.Contains(group.Files, fun (f: string) -> Path.GetFileName(f) = "swept.json")
 
         // Not dropped. This is the half that pins detection over exclusion: the rejected design

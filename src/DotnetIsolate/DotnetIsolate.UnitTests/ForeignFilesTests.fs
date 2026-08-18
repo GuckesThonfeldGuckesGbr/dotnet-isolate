@@ -110,6 +110,20 @@ let ``closure membership ignores a trailing separator`` () =
         ForeignFiles.detect (projectsIn [ app ]) [ app + string System.IO.Path.DirectorySeparatorChar ] [ file ]
     )
 
+// Windows accepts both '\' and '/' and MSBuild returns a mix depending on how an item was
+// authored, so a closure directory spelled with the alternate separator must still match. On Unix
+// the two characters are the same and this degenerates to a restatement of the plain case - it
+// earns its keep on the Windows leg of CI.
+[<Fact>]
+let ``closure membership ignores which separator spelled the path`` () =
+    let app = path [ "repo"; "App" ]
+    let file = path [ "repo"; "App"; "Program.cs" ]
+
+    let alternate =
+        app.Replace(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+
+    Assert.Empty(ForeignFiles.detect (projectsIn [ app ]) [ alternate ] [ file ])
+
 // Segment-wise, not string-prefix: "AppTests" is not the "App" directory.
 [<Fact>]
 let ``a prefix-sharing sibling project is still foreign`` () =
