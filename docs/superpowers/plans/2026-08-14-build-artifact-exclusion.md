@@ -42,7 +42,7 @@ dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj
 - Consumes: `MirrorRoot.isUnder : string -> string -> bool` (already exists).
 - Produces: `BuildArtifacts.ContainsProjectFile = string -> bool`; `BuildArtifacts.isBuildArtifact : ContainsProjectFile -> string list -> string -> bool`; `BuildArtifacts.Partition = { Kept: string list; Excluded: string list }`; `BuildArtifacts.partition : ContainsProjectFile -> string list -> string list -> Partition`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```fsharp
 module DotnetIsolate.UnitTests.BuildArtifactsTests
@@ -151,12 +151,12 @@ let ``partition splits kept from excluded and preserves order`` () =
     Assert.Equal<string list>([ artifact ], result.Excluded)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter BuildArtifactsTests`
 Expected: compile error — `BuildArtifacts` is not defined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```fsharp
 module DotnetIsolate.Core.BuildArtifacts
@@ -265,12 +265,12 @@ Add to `DotnetIsolate.UnitTests.fsproj` immediately before `<Compile Include="Pr
         <Compile Include="BuildArtifactsTests.fs"/>
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter BuildArtifactsTests`
 Expected: PASS, 13 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/BuildArtifacts.fs \
@@ -295,7 +295,7 @@ git commit -m "feat: add the build-artifact classification rules (FR-15)"
 - Consumes: `BuildArtifacts.ContainsProjectFile` from Task 1.
 - Produces: `BuildArtifactsIo.containsProjectFile : BuildArtifacts.ContainsProjectFile`.
 
-- [ ] **Step 1: Write the failing integration test**
+- [x] **Step 1: Write the failing integration test**
 
 ```fsharp
 module DotnetIsolate.IntegrationTests.BuildArtifactsTests
@@ -333,12 +333,12 @@ let ``containsProjectFile recognises fsproj and vbproj too`` () =
         Assert.True(BuildArtifactsIo.containsProjectFile vbDir))
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter BuildArtifactsTests`
 Expected: compile error — `BuildArtifactsIo` is not defined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```fsharp
 /// Real filesystem implementation of BuildArtifacts.ContainsProjectFile, kept in its own file so
@@ -385,12 +385,12 @@ Add to `DotnetIsolate.IntegrationTests.fsproj` immediately before `<Compile Incl
 
 In `coverage.unit.runsettings`, add `,[DotnetIsolate.Core]DotnetIsolate.Core.BuildArtifactsIo` to the `<Exclude>` list (QP-5).
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter BuildArtifactsTests`
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/BuildArtifactsIo.fs \
@@ -413,7 +413,7 @@ git commit -m "feat: back the project-file anchor with a memoized filesystem pro
 **Interfaces:**
 - Produces: `FileResolution.outputDirectoryPropertyNames : string list`; `FileResolution.resolveOutputDirectories : Map<string,string> -> string -> string list`; `FileResolutionIo.outputDirectoryPropertyNames`.
 
-- [ ] **Step 1: Write the failing tests** (append to `FileResolutionTests.fs`)
+- [x] **Step 1: Write the failing tests** (append to `FileResolutionTests.fs`)
 
 ```fsharp
 [<Fact>]
@@ -438,12 +438,12 @@ let ``resolveOutputDirectories keeps an absolute artifacts path and drops unset 
     Assert.Equal<string list>([ artifacts ], result)
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter FileResolutionTests`
 Expected: compile error — `resolveOutputDirectories` is not defined.
 
-- [ ] **Step 3: Write the implementation** (in `FileResolution.fs`, after `filePathPropertyNames`)
+- [x] **Step 3: Write the implementation** (in `FileResolution.fs`, after `filePathPropertyNames`)
 
 ```fsharp
 /// MSBuild *properties* naming a *directory* that holds generated build output (FR-15 rule D).
@@ -485,12 +485,12 @@ In `FileResolutionIo.fs`, after `filePathPropertyNames`:
 let outputDirectoryPropertyNames = FileResolution.outputDirectoryPropertyNames
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter FileResolutionTests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/FileResolution.fs \
@@ -512,7 +512,7 @@ git commit -m "feat: resolve MSBuild-declared output directories for rule D"
 - Consumes: `BuildArtifacts.partition`, `BuildArtifactsIo.containsProjectFile`, `FileResolution.resolveOutputDirectories`, `FileResolutionIo.outputDirectoryPropertyNames`.
 - Produces: `Pipeline.IsolateResult.ExcludedArtifacts : string list`.
 
-- [ ] **Step 1: Write the failing integration tests**
+- [x] **Step 1: Write the failing integration tests**
 
 ```fsharp
 module DotnetIsolate.IntegrationTests.BuildArtifactExclusionTests
@@ -595,12 +595,12 @@ let ``isolate excludes obj content pulled in by a hand-written glob`` () =
         Assert.False(Directory.Exists(Path.Combine(outputDir, "A", "obj"))))
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter BuildArtifactExclusionTests`
 Expected: FAIL — `ExcludedArtifacts` is not a field of `IsolateResult`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `Pipeline.fs`, add to `IsolateResult` after `ExcludedUnderOutput`:
 
@@ -640,12 +640,12 @@ After `let allFiles = (projectFiles @ implicitFiles) |> List.distinct`, and *bef
 
 Add `ExcludedArtifacts = artifactPartition.Excluded` to the returned record.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj`
 Expected: PASS, including the pre-existing pipeline tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/Pipeline.fs \
@@ -667,7 +667,7 @@ The assertion that matters is not "no artifacts leaked" but "the mirror root did
 `artifacts/` at the repo root, letting those paths through raises the common ancestor and shifts
 every output path, which is a total cache miss rather than a partial one.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```fsharp
 /// UseArtifactsOutput relocates all output to a repo-root artifacts/ tree, whose bin/obj have no
@@ -705,12 +705,12 @@ let ``isolate excludes the artifacts layout without moving the mirror root`` () 
         Assert.True(File.Exists(Path.Combine(outputDir, "Directory.Build.props"))))
 ```
 
-- [ ] **Step 2: Run to verify the assertion is meaningful**
+- [x] **Step 2: Run to verify the assertion is meaningful**
 
 Run: `dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter BuildArtifactExclusionTests`
 Expected: PASS with Task 4's implementation in place. If it fails, rule D is not reaching the pipeline — check that `allPropertyNames` includes `outputDirectoryPropertyNames`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.IntegrationTests/BuildArtifactExclusionTests.fs
@@ -736,7 +736,7 @@ keeps `Program.fs` to argument parsing plus printing.
 - Consumes: `Pipeline.IsolateResult`.
 - Produces: `Report.warnings : Pipeline.IsolateResult -> string list`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```fsharp
 module DotnetIsolate.UnitTests.ReportTests
@@ -801,12 +801,12 @@ let ``missing files and files under the output are still reported per file`` () 
     Assert.Contains(warnings, fun w -> w.Contains(underOutput))
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter ReportTests`
 Expected: compile error — `Report` is not defined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```fsharp
 module DotnetIsolate.Core.Report
@@ -850,12 +850,12 @@ Replace `Program.fs` lines 53-65 (the four `for entry in ...` loops) with:
             eprintfn $"{warning}"
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `dotnet build DotnetIsolate.sln && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/Report.fs \
@@ -875,7 +875,7 @@ git commit -m "feat: summarise artifact exclusions and stale output entries"
 - Modify: `DESIGN.md` (file-resolution section)
 - Modify: `README.md` (only if it enumerates what lands in the output)
 
-- [ ] **Step 1: Add FR-15 to `REQUIREMENTS.md`, after FR-14**
+- [x] **Step 1: Add FR-15 to `REQUIREMENTS.md`, after FR-14**
 
 ```markdown
 - **FR-15** — Generated build artifacts are excluded from the isolated output, since they are not
@@ -898,12 +898,12 @@ git commit -m "feat: summarise artifact exclusions and stale output entries"
   this is accepted, and the count of exclusions is reported.
 ```
 
-- [ ] **Step 2: Amend FR-7**
+- [x] **Step 2: Amend FR-7**
 
 Change "every entry the run did not itself produce is reported to the user" to "the number of
 entries the run did not itself produce is reported to the user".
 
-- [ ] **Step 3: Document the three mechanisms in `DESIGN.md`**
+- [x] **Step 3: Document the three mechanisms in `DESIGN.md`**
 
 In the file-resolution section, record why artifacts appear in the resolved set at all — the SDK
 excludes only a project's *own* `bin`/`obj`, so a project containing other projects globs theirs in;
@@ -913,12 +913,12 @@ inflation rather than the leaked files. Note the verified negative: the generate
 `*.GeneratedMSBuildEditorConfig.editorconfig` is added by a target, not at evaluation, so
 `-getItem:EditorConfigFiles` never returns it.
 
-- [ ] **Step 4: Verify no stale claims remain**
+- [x] **Step 4: Verify no stale claims remain**
 
 Run: `grep -rn "was already in the output directory" README.md DESIGN.md REQUIREMENTS.md`
 Expected: no matches (the old per-file wording is gone).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add REQUIREMENTS.md DESIGN.md README.md

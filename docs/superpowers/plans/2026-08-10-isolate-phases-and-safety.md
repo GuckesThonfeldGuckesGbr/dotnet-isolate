@@ -66,7 +66,7 @@ The key insight: excluding files under the output directory and erroring when th
   - `OutputSafety.partitionInputs : outputDir:string -> files:string list -> InputPartition`
   - `OutputSafety.validate : outputDir:string -> partition:InputPartition -> Result<unit, string>`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/DotnetIsolate/DotnetIsolate.UnitTests/OutputSafetyTests.fs`:
 
@@ -154,12 +154,12 @@ let ``validate fails when the output directory consumed every input`` () =
         Assert.Contains(outputDir, message)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj`
 Expected: compile error — `OutputSafety` is not defined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/DotnetIsolate/DotnetIsolate.Core/OutputSafety.fs`:
 
@@ -202,7 +202,7 @@ let validate (outputDir: string) (partition: InputPartition) : Result<unit, stri
         Ok()
 ```
 
-- [ ] **Step 4: Register both files in their projects**
+- [x] **Step 4: Register both files in their projects**
 
 In `DotnetIsolate.Core.fsproj`, add after the `MirrorRoot.fs` line (it depends on `MirrorRoot`):
 
@@ -216,12 +216,12 @@ In `DotnetIsolate.UnitTests.fsproj`, add after the `MirrorRootTests.fs` line:
         <Compile Include="OutputSafetyTests.fs"/>
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj`
 Expected: PASS, all 7 new tests green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/OutputSafety.fs \
@@ -243,7 +243,7 @@ git commit -m "feat: add OutputSafety to partition and validate inputs against t
 - Consumes: `LinkStrategy.Strategy` (`Hardlink | Copy`), `Hardlink.create`.
 - Produces: `Materialize.materialize : strategy:LinkStrategy.Strategy -> clean:bool -> mirrorRoot:string -> outputRoot:string -> files:string list -> string list` — returns the absolute paths of entries that were already in `outputRoot` and were **not** produced by this run. Always `[]` when `clean` is true.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `src/DotnetIsolate/DotnetIsolate.IntegrationTests/MaterializeTests.fs`, **replace** the existing test `` `materialize deletes and recreates a pre-existing output folder (FR-7)` `` (lines 49-60) with these three, and update the two earlier tests' calls to pass `false` for `clean` (i.e. `Materialize.materialize LinkStrategy.Hardlink false mirrorRoot outputRoot files`):
 
@@ -297,12 +297,12 @@ let ``materialize with clean empties the output folder first`` () =
         Assert.Empty(stale))
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter "FullyQualifiedName~MaterializeTests"`
 Expected: compile error — `materialize` takes 4 arguments, not 5.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Replace `materialize` in `src/DotnetIsolate/DotnetIsolate.Core/Materialize.fs` (keep `placeFile` unchanged):
 
@@ -344,16 +344,16 @@ let materialize
     Set.difference preExisting produced |> Set.toList
 ```
 
-- [ ] **Step 4: Fix the one other caller so the solution compiles**
+- [x] **Step 4: Fix the one other caller so the solution compiles**
 
 `Pipeline.fs:100` calls `Materialize.materialize strategy mirrorRoot outputDir allFiles`. Change it to `Materialize.materialize strategy false mirrorRoot outputDir allFiles |> ignore` for now; Task 3 replaces this line properly.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter "FullyQualifiedName~MaterializeTests"`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/Materialize.fs \
@@ -379,7 +379,7 @@ git commit -m "feat!: make materialize merge by default and report stale output 
 
 Note: every existing construction of `IsolateOptions` in the test suites must gain `Clean = false`. Find them with `grep -rn "SolutionPath = " src/DotnetIsolate --include=*.fs`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/DotnetIsolate/DotnetIsolate.IntegrationTests/PipelineTests.fs`:
 
@@ -476,12 +476,12 @@ let ``isolate with Clean removes pre-existing output entries`` () =
 
 These reference `ProjectPaths` and `RestoreOnly`, which Tasks 6-9 introduce. To keep this task independently testable, add **all** the new `IsolateOptions` fields now (`ProjectPaths`, `RestoreOnly`, `Clean`) but only implement `Clean` and the safety wiring in this task; `ProjectPaths` is consumed as `List.head` for now and `RestoreOnly` is ignored. Tasks 7 and 9 give them their real behaviour.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter "FullyQualifiedName~PipelineTests"`
 Expected: compile error — `IsolateOptions` has no field `ProjectPaths`.
 
-- [ ] **Step 3: Update the option and result types**
+- [x] **Step 3: Update the option and result types**
 
 In `Pipeline.fs`, replace the two type definitions:
 
@@ -509,7 +509,7 @@ type IsolateResult =
       StaleEntries: string list }
 ```
 
-- [ ] **Step 4: Wire safety into `isolate`**
+- [x] **Step 4: Wire safety into `isolate`**
 
 In `Pipeline.fs`, take the entry project as `let projectPath = Path.GetFullPath(List.head options.ProjectPaths)` for now.
 
@@ -549,7 +549,7 @@ And extend the returned record:
       StaleEntries = staleEntries }
 ```
 
-- [ ] **Step 5: Add the CLI flags**
+- [x] **Step 5: Add the CLI flags**
 
 In `src/DotnetIsolate/DotnetIsolate/Program.fs`, add to `Arguments` and its `Usage`:
 
@@ -581,16 +581,16 @@ Build the options with the new fields and report the new diagnostics after the e
             eprintfn $"warning: {entry} was already in the output directory and was not produced by this run"
 ```
 
-- [ ] **Step 6: Fix every other `IsolateOptions` construction**
+- [x] **Step 6: Fix every other `IsolateOptions` construction**
 
 Run `grep -rn "SolutionPath = " src/DotnetIsolate --include=*.fs` and add `ProjectPaths` (replacing `ProjectPath`), `RestoreOnly = false` and `Clean = false` to each. `DotnetIsolate.E2ETests/DockerCacheTests.fs:87` and `:98` are among them.
 
-- [ ] **Step 7: Run the full build and both test suites**
+- [x] **Step 7: Run the full build and both test suites**
 
 Run: `cd src/DotnetIsolate && dotnet build DotnetIsolate.sln && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A src/DotnetIsolate
@@ -611,7 +611,7 @@ git commit -m "feat!: refuse an output dir that consumes its inputs, add --clean
   - `FileResolution.resolveFiles : Resolvers -> projectPath:string -> ResolvedFiles`
   - `FileResolution.resolveAllFiles : Resolvers -> projects:string list -> ResolvedFiles`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/DotnetIsolate/DotnetIsolate.UnitTests/FileResolutionTests.fs` (match the file's existing helper style for building a `Resolvers` value; if it builds one inline, do the same here):
 
@@ -690,12 +690,12 @@ let ``resolveAllFiles unions files and missing reports across projects`` () =
     Assert.Equal<string list>([ missing ], result.MissingItemFiles)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter "FullyQualifiedName~FileResolutionTests"`
 Expected: compile error — `resolveFiles` returns `string list`, which has no `Files` member.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Replace `resolveFiles` and `resolveAllFiles` in `FileResolution.fs`:
 
@@ -748,7 +748,7 @@ let resolveAllFiles (resolvers: Resolvers) (projects: string list) : ResolvedFil
       MissingItemFiles = resolved |> List.collect (fun r -> r.MissingItemFiles) |> List.distinct }
 ```
 
-- [ ] **Step 4: Update the pipeline caller**
+- [x] **Step 4: Update the pipeline caller**
 
 In `Pipeline.fs`, `let projectFiles = FileResolution.resolveAllFiles resolvers projects` becomes:
 
@@ -766,12 +766,12 @@ In `Program.fs`, report them:
             eprintfn $"warning: {entry} is referenced by a project but does not exist; skipped"
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `cd src/DotnetIsolate && dotnet build DotnetIsolate.sln && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj`
 Expected: PASS. Fix any integration test that asserted on the old `string list` return.
 
-- [ ] **Step 6: Add the integration reproduction**
+- [x] **Step 6: Add the integration reproduction**
 
 Append to `src/DotnetIsolate/DotnetIsolate.IntegrationTests/PipelineTests.fs`:
 
@@ -805,7 +805,7 @@ let ``isolate warns about a referenced file that does not exist instead of faili
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter "FullyQualifiedName~PipelineTests"`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A src/DotnetIsolate
@@ -823,7 +823,7 @@ git commit -m "feat!: skip and report referenced files that do not exist on disk
 **Interfaces:**
 - Produces: `ProjectGraph.resolveMany : ProjectReferenceResolver -> entryProjects:string list -> string list`. `resolve` is retained as a single-entry wrapper so existing callers and tests are unaffected.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/DotnetIsolate/DotnetIsolate.UnitTests/ProjectGraphTests.fs`:
 
@@ -856,12 +856,12 @@ let ``resolveMany with a single entry matches resolve`` () =
     Assert.Equal<string list>(ProjectGraph.resolve references a, ProjectGraph.resolveMany references [ a ])
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter "FullyQualifiedName~ProjectGraphTests"`
 Expected: compile error — `resolveMany` is not defined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `ProjectGraph.fs`, rename `resolve` to `resolveMany`, change its seed frontier from `[ entryProject ]` to the deduplicated `entryProjects`, and add the wrapper. Keep the existing doc comment on `resolveMany` (it explains the parallel-per-level design and PR-1) and add a sentence about multiple entries:
 
@@ -895,12 +895,12 @@ let resolve (getReferences: ProjectReferenceResolver) (entryProject: string) : s
     resolveMany getReferences [ entryProject ]
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj --filter "FullyQualifiedName~ProjectGraphTests"`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/ProjectGraph.fs \
@@ -921,7 +921,7 @@ git commit -m "feat: add ProjectGraph.resolveMany for multiple entry projects"
 - Consumes: `ProjectGraph.resolveMany`, `Pipeline.IsolateOptions.ProjectPaths`.
 - Produces: no new public names; `Pipeline.isolate` now honours every entry in `ProjectPaths`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `PipelineTests.fs`:
 
@@ -982,12 +982,12 @@ let ``isolate requires an explicit output directory for more than one entry proj
         Assert.Contains("output directory", ex.Message))
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter "FullyQualifiedName~PipelineTests"`
 Expected: FAIL — only the first entry project's closure is isolated.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `Pipeline.fs`:
 
@@ -1021,7 +1021,7 @@ Replace the output-directory default:
                 "an explicit output directory (-o/--output-dir) is required when more than one entry project is given"
 ```
 
-- [ ] **Step 4: Update the CLI to accept a list**
+- [x] **Step 4: Update the CLI to accept a list**
 
 In `Program.fs`, change the positional argument and its usage:
 
@@ -1035,12 +1035,12 @@ In `Program.fs`, change the positional argument and its usage:
 
 and build the options with `ProjectPaths = results.GetResult(Project_Paths)`.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `cd src/DotnetIsolate && dotnet build DotnetIsolate.sln && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj`
 Expected: PASS.
 
-- [ ] **Step 6: Verify the CLI accepts two projects**
+- [x] **Step 6: Verify the CLI accepts two projects**
 
 Run:
 
@@ -1050,7 +1050,7 @@ cd src/DotnetIsolate && dotnet run --project DotnetIsolate/DotnetIsolate.fsproj 
 
 Expected: usage shows `<paths>...` for the main command and lists `--restore` is *not* yet present (Task 8 adds it), `--clean` is.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A src/DotnetIsolate
@@ -1072,7 +1072,7 @@ git commit -m "feat: isolate the union of several entry projects in one run"
   - `Phase.restoreRelevantFileNames : string list`
   - `Phase.restoreSubset : projects:string list -> files:string list -> string list`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/DotnetIsolate/DotnetIsolate.UnitTests/PhaseTests.fs`:
 
@@ -1140,12 +1140,12 @@ let ``restoreSubset matches build file names case-insensitively`` () =
     Assert.Contains(nuget, result)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj`
 Expected: compile error — `Phase` is not defined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/DotnetIsolate/DotnetIsolate.Core/Phase.fs`:
 
@@ -1193,7 +1193,7 @@ let restoreSubset (projects: string list) (files: string list) : string list =
     |> List.filter (fun f -> Set.contains f projectSet || isRestoreRelevantName f)
 ```
 
-- [ ] **Step 4: Register both files in their projects**
+- [x] **Step 4: Register both files in their projects**
 
 In `DotnetIsolate.Core.fsproj`, add before `<Compile Include="Pipeline.fs"/>`:
 
@@ -1207,12 +1207,12 @@ In `DotnetIsolate.UnitTests.fsproj`, add after the `OutputSafetyTests.fs` line:
         <Compile Include="PhaseTests.fs"/>
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/DotnetIsolate/DotnetIsolate.Core/Phase.fs \
@@ -1237,7 +1237,7 @@ git commit -m "feat: add Phase.restoreSubset selecting the dotnet restore inputs
 
 The subset is applied **after** the mirror root is computed from the full set, so both phases share one mirror root and the two outputs overlay exactly.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `PipelineTests.fs`:
 
@@ -1298,12 +1298,12 @@ let ``restore and full phases place project files at identical relative paths`` 
         Assert.True(File.Exists(Path.Combine(fullDir, "A", "A.fsproj"))))
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj --filter "FullyQualifiedName~PipelineTests"`
 Expected: FAIL — `RestoreOnly = true` still emits every file, so `Program.fs` exists in the output.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `Pipeline.fs`, immediately **after** the mirror root is computed and **before** the link-strategy probe, narrow the file set:
 
@@ -1328,7 +1328,7 @@ Update the default output directory to distinguish the phases:
             Path.GetFullPath(if options.RestoreOnly then $"{name}.restore" else name)
 ```
 
-- [ ] **Step 4: Add the CLI flag**
+- [x] **Step 4: Add the CLI flag**
 
 In `Program.fs`, add to `Arguments` and `Usage`:
 
@@ -1342,12 +1342,12 @@ In `Program.fs`, add to `Arguments` and `Usage`:
 
 and set `RestoreOnly = results.Contains(Restore)`.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `cd src/DotnetIsolate && dotnet build DotnetIsolate.sln && dotnet test DotnetIsolate.UnitTests/DotnetIsolate.UnitTests.fsproj && dotnet test DotnetIsolate.IntegrationTests/DotnetIsolate.IntegrationTests.fsproj`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A src/DotnetIsolate
@@ -1370,7 +1370,7 @@ This closes the gap the spec identifies: the current suite only changes a file *
 - Consumes: `runDockerBuild`, `packLocalTool`, `copyFixtureToTempDir`, `touchUnrelatedFile`, `expensiveLayersCached`, `stepNotCached`.
 - Produces: `DockerHarness.stepCached : output:string -> stepNeedle:string -> bool` (public wrapper over the existing private `isStepCached`, buildx only).
 
-- [ ] **Step 1: Create the Dockerfile fixture**
+- [x] **Step 1: Create the Dockerfile fixture**
 
 Create `src/DotnetIsolate/DotnetIsolate.E2ETests/Fixtures/TwoPhase/Dockerfile`:
 
@@ -1407,7 +1407,7 @@ Note: the `nupkg` directory is in the build context, so the bind mount at `/src`
 
 No project change is needed: `DotnetIsolate.E2ETests.fsproj:18` already copies fixtures by glob (`<None Include="Fixtures/**/*" CopyToOutputDirectory="PreserveNewest"/>`), so the new Dockerfile lands in `bin/Release/net8.0/Fixtures/TwoPhase/` automatically.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 In `DockerCacheTests.fs`, add the fixture path and the new test:
 
@@ -1454,12 +1454,12 @@ let ``restore layer stays cached when a file inside the closure changes`` () =
         deleteIfExists contextDir
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.E2ETests/DotnetIsolate.E2ETests.fsproj --filter "FullyQualifiedName~restore layer stays cached"`
 Expected: compile error — `stepCached` is not defined.
 
-- [ ] **Step 4: Expose `stepCached` and drop the classic builder**
+- [x] **Step 4: Expose `stepCached` and drop the classic builder**
 
 In `DockerHarness.fs`, add next to `stepNotCached`:
 
@@ -1470,14 +1470,14 @@ let stepCached (output: string) (stepNeedle: string) = isStepCached true output 
 
 In `DockerCacheTests.fs`, convert the two existing `[<Theory>]`/`[<InlineData(true)>]`/`[<InlineData(false)>]` tests into `[<Fact>]`s that pass `true` for `useBuildKit`, per the spec's DI-1 change. Leave `runDockerBuild`'s `useBuildKit` parameter in place — the harness still takes it — but no test passes `false`.
 
-- [ ] **Step 5: Run the E2E suite**
+- [x] **Step 5: Run the E2E suite**
 
 Run: `cd src/DotnetIsolate && dotnet test DotnetIsolate.E2ETests/DotnetIsolate.E2ETests.fsproj`
 Expected: PASS. This needs a Docker daemon and pulls SDK images, so it is slow on a cold cache.
 
 If the new test fails because `dotnet restore` reruns, do **not** relax the assertion — diff the two `/isolated/restore` trees to find which file differs, and fix `Phase.restoreSubset` so that file is correctly included or excluded. The verified premise is that `COPY --from` is content-keyed, so an unchanged restore half must cache-hit.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A src/DotnetIsolate/DotnetIsolate.E2ETests
@@ -1495,7 +1495,7 @@ git commit -m "test: prove the restore layer stays cached across in-closure sour
 - Modify: `REQUIREMENTS.md:34` (FR-7), `:84` (DI-1), `:141` (QP-12)
 - Modify: `DESIGN.md` (the "Docker integration patterns" section, and the pipeline steps 6-7 description)
 
-- [ ] **Step 1: Rewrite the README**
+- [x] **Step 1: Rewrite the README**
 
 Replace the whole "How will this help me keep my docker image small?" section (lines 40-91) with a single documented pattern. Keep "Usage" and "What about files outside the solution folder?", tightening the latter. Cut the README substantially overall.
 
@@ -1516,29 +1516,29 @@ Also document the new flags in "Usage":
 dotnet isolate path/to/<Project>.csproj [more.csproj ...] [-o <dir>] [-s <path>] [--restore] [--clean]
 ```
 
-- [ ] **Step 2: Amend REQUIREMENTS.md**
+- [x] **Step 2: Amend REQUIREMENTS.md**
 
 - **FR-7**: rewrite from "If the output folder already exists, the tool deletes it and recreates it from scratch" to: the tool merges into an existing output folder and reports entries it did not produce; `--clean` restores delete-and-recreate. Add that the tool refuses an output directory that would consume its own inputs, and that resolved inputs under the output directory are excluded.
 - **DI-1**: rewrite from "Two supported Dockerfile patterns are documented, both of which work under any builder" to one documented pattern, buildx only, using a read-only bind mount and the two-phase `--restore` split.
 - **QP-12**: extend to cover a change *inside* the isolated closure asserting the restore layer stays cached; drop the classic-builder half of the matrix.
 - Add new requirements for `--restore`, `--clean`, multiple entry projects, and warn-on-missing-file. Follow the existing `FR-n` numbering convention and continue from the highest number in use.
 
-- [ ] **Step 3: Amend DESIGN.md**
+- [x] **Step 3: Amend DESIGN.md**
 
 Update the "Docker integration patterns" section to the single buildx pattern and record the verified finding that `COPY --from` is content-keyed and mtime-insensitive. Update pipeline step 6 (materialization no longer deletes; the output directory is partitioned out of the input set before the mirror root is computed) and note that step 7's solution generation runs in both phases. Add `OutputSafety.fs` and `Phase.fs` to any module listing.
 
-- [ ] **Step 4: Verify the documented Dockerfile actually works**
+- [x] **Step 4: Verify the documented Dockerfile actually works**
 
 The README's Dockerfile must not be aspirational. Confirm it matches the E2E fixture from Task 9 (which is executed by a real `docker build`) apart from the project path and the `dotnet tool install` source.
 
 Run: `diff <(sed 's|ServiceA|Service1|g' src/DotnetIsolate/DotnetIsolate.E2ETests/Fixtures/TwoPhase/Dockerfile) -` against the README block, or compare them by eye — the `COPY --from` / `RUN` sequence must be identical.
 
-- [ ] **Step 5: Check line endings did not regress**
+- [x] **Step 5: Check line endings did not regress**
 
 Run: `git diff --stat`
 Expected: the changed-line counts are proportionate to the edits. A one-line edit reporting hundreds of changed lines means the file was rewritten with different line endings — `.gitattributes` enforces LF.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add README.md REQUIREMENTS.md DESIGN.md
@@ -1549,7 +1549,7 @@ git commit -m "docs: document the buildx two-phase pattern and amend FR-7, DI-1,
 
 ### Task 11: Full verification
 
-- [ ] **Step 1: Build and run every suite**
+- [x] **Step 1: Build and run every suite**
 
 ```bash
 cd src/DotnetIsolate
@@ -1561,7 +1561,7 @@ dotnet test DotnetIsolate.E2ETests/DotnetIsolate.E2ETests.fsproj
 
 Expected: all green. Report the actual counts; do not claim success without the output.
 
-- [ ] **Step 2: Re-run the original reproductions by hand**
+- [x] **Step 2: Re-run the original reproductions by hand**
 
 ```bash
 cd src/DotnetIsolate && dotnet build DotnetIsolate/DotnetIsolate.fsproj -c Release
@@ -1577,11 +1577,11 @@ find $W/repo -name '*.csproj' | sort
 
 Expected: case C exits 1 with a message naming the output directory, and all five `.csproj` files are still present. Case B exits 0 both times.
 
-- [ ] **Step 3: Note anything unverifiable locally**
+- [x] **Step 3: Note anything unverifiable locally**
 
 Per `AGENTS.md`, this work touches path construction and comparison (`OutputSafety`, `Phase`), so state explicitly in the final summary what could not be verified on the local platform — Windows path behaviour in particular is only exercised by CI.
 
-- [ ] **Step 4: Push the branch**
+- [x] **Step 4: Push the branch**
 
 ```bash
 git push -u origin feat/isolate-phases-and-safety
