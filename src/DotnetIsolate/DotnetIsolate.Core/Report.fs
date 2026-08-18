@@ -13,6 +13,9 @@ let warnings (result: Pipeline.IsolateResult) : string list =
     [ if not (List.isEmpty result.ExcludedArtifacts) then
           $"note: skipped {result.ExcludedArtifacts.Length} generated build artifact(s) (bin/, obj/, node_modules/, build and coverage logs)"
 
+      for group in result.ForeignProjectFiles do
+          $"note: {group.Files.Length} file(s) resolved from {group.Directory}, whose project is not in the isolated closure"
+
       if not (List.isEmpty result.StaleEntries) then
           $"warning: the output directory was not clean ({result.StaleEntries.Length} pre-existing file(s) left in place); use --clean to replace it"
 

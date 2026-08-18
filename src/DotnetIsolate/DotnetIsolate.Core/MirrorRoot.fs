@@ -39,6 +39,19 @@ let isUnder (directory: string) (path: string) : bool =
 
     commonPrefixOfTwo dirSegments (comparisonSegments path) |> List.length = List.length dirSegments
 
+/// True when two paths name the same directory - segment-wise and case-insensitively, with a
+/// trailing separator on either side insignificant, exactly as `isUnder` treats them.
+///
+/// Kept here rather than at the call site because path comparison is this module's job: raw string
+/// equality gets it wrong on Windows and macOS (`C:\Repo\App` vs `C:\repo\App`) and wrong anywhere
+/// for `App` vs `App/`, and every caller would have to rediscover that.
+let sameDirectory (a: string) (b: string) : bool =
+    let aSegments = comparisonSegments a
+    let bSegments = comparisonSegments b
+
+    List.length aSegments = List.length bSegments
+    && commonPrefixOfTwo aSegments bSegments |> List.length = List.length aSegments
+
 /// Computes the longest common ancestor directory shared by every directory in `directories`
 /// (FR-2, pipeline step 4) - compares path segments, not raw string prefixes, so
 /// "/repo/src2" is never mistaken for a descendant of "/repo/src". None for an empty input.

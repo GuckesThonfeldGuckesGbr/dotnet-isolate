@@ -23,6 +23,7 @@
         <Compile Include="DeterminismTests.fs"/>
         <Compile Include="BuildArtifactsTests.fs"/>
         <Compile Include="BuildArtifactExclusionTests.fs"/>
+        <Compile Include="ForeignProjectFileTests.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
 

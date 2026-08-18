@@ -25,6 +25,10 @@ type IsolateResult =
       /// Resolved inputs dropped because they are generated build artifacts rather than build
       /// inputs (FR-15) - a previous host-side build's `obj/`, `bin/`, `node_modules/`, and so on.
       ExcludedArtifacts: string list
+      /// Resolved inputs owned by a project outside the closure, grouped by owning directory
+      /// (FR-16). Reported, never dropped: they are usually an over-reaching glob, but may be a
+      /// deliberate cross-project link, and only the author can tell the two apart.
+      ForeignProjectFiles: ForeignFiles.ForeignGroup list
       /// Entries already in the output directory that this run did not produce.
       StaleEntries: string list
       /// Item-derived paths referenced by a project that do not exist on disk, dropped rather than
@@ -138,6 +142,14 @@ let isolate (options: IsolateOptions) : IsolateResult =
 
     let allFiles = artifactPartition.Kept
 
+    // FR-16, over the artifact-filtered set: a `bin/` file under a foreign project has already
+    // been dropped above and must not be reported a second time under a different heading.
+    let foreignProjectFiles =
+        ForeignFiles.detect
+            BuildArtifactsIo.containsProjectFile
+            (projects |> List.map Path.GetDirectoryName)
+            allFiles
+
     // Checked here, before the output-directory partition below, so this failure keeps reporting
     // its own cause (nothing resolved at all) instead of being masked by OutputSafety.validate's
     // "the output directory contains every resolved input file" - which is only true, and only the
@@ -248,6 +260,7 @@ let isolate (options: IsolateOptions) : IsolateResult =
       Strategy = strategy
       ExcludedUnderOutput = partition.ExcludedUnderOutput
       ExcludedArtifacts = artifactPartition.Excluded
+      ForeignProjectFiles = foreignProjectFiles
       StaleEntries = staleEntries
       MissingFiles = resolvedProjectFiles.MissingItemFiles
       EntriesOutsideDiscoveredSolution = entriesOutsideDiscoveredSolution }

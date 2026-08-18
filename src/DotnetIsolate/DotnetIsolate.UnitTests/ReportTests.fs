@@ -13,6 +13,7 @@ let private clean: Pipeline.IsolateResult =
       Strategy = LinkStrategy.Copy
       ExcludedUnderOutput = []
       ExcludedArtifacts = []
+      ForeignProjectFiles = []
       StaleEntries = []
       MissingFiles = []
       EntriesOutsideDiscoveredSolution = [] }
@@ -42,6 +43,26 @@ let ``stale entries collapse into a single counted line mentioning --clean`` () 
     Assert.Contains("not clean", line)
     Assert.Contains("2", line)
     Assert.Contains("--clean", line)
+
+// Per foreign directory, not per file: one over-reaching glob sweeps many files at once, and the
+// directory is the thing the user has to go and fix.
+[<Fact>]
+let ``foreign project files collapse into one counted line per directory`` () =
+    let other = path [ "repo"; "Other" ]
+    let first = path [ "repo"; "Other"; "a.cs" ]
+    let second = path [ "repo"; "Other"; "b.cs" ]
+
+    let group: ForeignFiles.ForeignGroup =
+        { Directory = other; Files = [ first; second ] }
+
+    let result =
+        { clean with ForeignProjectFiles = [ group ] }
+
+    let line = Report.warnings result |> List.exactlyOne
+
+    Assert.Contains("2 file(s)", line)
+    Assert.Contains(other, line)
+    Assert.Contains("not in the isolated closure", line)
 
 // The two bulk categories are summarised; these two stay per file, because each path is
 // separately actionable.

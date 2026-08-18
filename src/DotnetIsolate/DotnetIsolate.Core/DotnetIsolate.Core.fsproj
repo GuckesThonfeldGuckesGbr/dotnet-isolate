@@ -13,6 +13,7 @@
         <Compile Include="MirrorRoot.fs"/>
         <Compile Include="BuildArtifacts.fs"/>
         <Compile Include="BuildArtifactsIo.fs"/>
+        <Compile Include="ForeignFiles.fs"/>
         <Compile Include="OutputSafety.fs"/>
         <Compile Include="Hardlink.fs"/>
         <Compile Include="LinkStrategy.fs"/>
