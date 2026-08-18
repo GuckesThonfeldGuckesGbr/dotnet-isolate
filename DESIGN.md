@@ -118,6 +118,21 @@ This describes how dotnet-isolate is built to satisfy the requirements in REQUIR
      project's own subdirectory — so the default globs never leak it, and rule 4 only ever fires on
      paths a hand-written glob resolved. It stays because that glob is the same mechanism as above.
 
+   **The same globs also sweep in files other projects own (FR-16), and those are reported, not
+   filtered.** The `<None Include="**/*"/>` above does not stop at artifacts: pointed up a level it
+   collects a sibling project's sources too. `ForeignFiles` detects them by owning project
+   directory — the nearest ancestor holding a project file — and the pipeline reports them
+   alongside the artifact count.
+
+   Detection, deliberately, not exclusion. Everything FR-15 drops is *regenerated* by the
+   container's own `restore`/`build`; a foreign source file is *consumed* by it, so dropping one
+   turns a working build into a compile error raised inside Docker. And the resolved path alone
+   cannot say whether a glob over-reached or an author wrote a deliberate
+   `<Compile Include="..\OtherProject\Shared.cs"/>` link, which `FileResolution` honours on purpose
+   — so the tool reports the fact and leaves the judgement to whoever wrote the glob. Files under a
+   directory no project owns are excluded from the report entirely, which is what keeps ordinary
+   shared-file links quiet.
+
    One thing checked and found *not* to be a leak path: the generated
    `obj/<config>/<tfm>/*.GeneratedMSBuildEditorConfig.editorconfig` is added by a target rather
    than at evaluation, so `-getItem:EditorConfigFiles` never returns it. FR-10's ancestor-globbed

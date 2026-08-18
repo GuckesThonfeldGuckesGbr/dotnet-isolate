@@ -132,6 +132,22 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   A file genuinely checked in under a project's own `bin`/`obj` is dropped; this is accepted, and
   the number of exclusions is reported. The count, not the list: exclusions arrive in bulk.
 
+- **FR-16** — A resolved input whose *owning project directory* — its nearest ancestor directory
+  directly containing a `.csproj`/`.fsproj`/`.vbproj` — is not one of the closure's own project
+  directories is **reported, and kept**. This is the residue of FR-1's "nothing more": a
+  hand-written glob such as `<Compile Include="..\**\*.cs"/>` sweeps in files another project owns,
+  which inflate the mirror root and move the `COPY --from` cache key whenever they change.
+
+  It is reported rather than dropped because, unlike every FR-15 artifact, such a file is an input
+  the build *consumes*: dropping a `Compile` item breaks compilation inside the container, far from
+  its cause. And the tool cannot tell an accidental sweep from a deliberate
+  `<Compile Include="..\OtherProject\Shared.cs"/>` link — after MSBuild evaluation both are bare
+  paths, and FR-4 honours such links on purpose. The author holds the discriminator the tool lacks,
+  so the ambiguity is surfaced rather than guessed, exactly as FR-14 surfaces a missing item file
+  instead of failing. A file under a directory *no* project owns (`..\..\shared\Version.cs`) is
+  never reported: that is the common, legitimate case, and warning about it would train users to
+  ignore the note. Reported per owning directory with a count, since one glob sweeps many files.
+
 ## Performance
 
 - **PR-1** — The analysis phase (determining the full set of files/projects to include) issues

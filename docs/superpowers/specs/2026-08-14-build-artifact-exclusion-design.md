@@ -248,14 +248,14 @@ as the first version of it was, passing with rule D disabled.
 
 **CLI:** the two summary lines appear with correct counts, and are absent at zero.
 
-## Deferred
+## Deferred (both now closed — see each entry)
 
-**Rule for foreign project directories.** A more aggressive generalisation — drop any resolved file
-under a directory whose project file is not in the isolated closure — follows directly from FR-1's
-"nothing more". It is deferred because it would break a deliberate cross-project link
-(`<Compile Include="..\OtherProject\Shared.cs"/>`), which `FileResolution.fs` explicitly honours
-today, in the narrow case where the linked file's owning project is outside the closure. Revisit if
-a real repo shows unrelated project sources reaching the output.
+**~~Rule for foreign project directories.~~ Resolved as FR-16** — and resolved the other way. The
+proposal was to *drop* any resolved file under a directory whose project is not in the closure. It
+became a report instead: such a file is an input the build consumes, not an artifact it
+regenerates, so dropping one breaks compilation inside the container, and the deliberate-link case
+noted here cannot be told apart from an over-reaching glob once MSBuild has evaluated both to bare
+paths. See `2026-08-18-foreign-project-files-design.md`.
 
 **~~E2E verification of the bind-mount cache key.~~ Done** — no longer deferred. The claim above is
 now a test in `DotnetIsolate.E2ETests`, and the answer was the pessimistic one: BuildKit does not
