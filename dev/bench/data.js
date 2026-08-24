@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787086021111,
+  "lastUpdate": 1787606742110,
   "repoUrl": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate",
   "entries": {
     "Benchmark": [
@@ -272,6 +272,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "OrchardCore.Cms.Web isolate: wall-clock time",
             "value": 57694,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "committer": {
+            "email": "ctg@baggerbagger.de",
+            "name": "Christopher Thonfeld-Guckes",
+            "username": "cguckes"
+          },
+          "distinct": true,
+          "id": "bc1d81d6a0a6baa5fe40535496c497c1233530cb",
+          "message": "Merge branch 'worktree-list-files-verb'\n\n# Conflicts:\n#\tdocs/superpowers/specs/2026-08-24-list-files-verb-design.md",
+          "timestamp": "2026-08-24T23:18:22+02:00",
+          "tree_id": "416f313b2c372b61b7fcdf0bfd981a55b127b7a9",
+          "url": "https://github.com/GuckesThonfeldGuckesGbr/dotnet-isolate/commit/bc1d81d6a0a6baa5fe40535496c497c1233530cb"
+        },
+        "date": 1787606741438,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "OrchardCore.Cms.Web isolate: included files",
+            "value": 980,
+            "unit": "files"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: included projects",
+            "value": 198,
+            "unit": "projects"
+          },
+          {
+            "name": "OrchardCore.Cms.Web isolate: wall-clock time",
+            "value": 57347,
             "unit": "ms"
           }
         ]
