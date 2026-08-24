@@ -62,3 +62,6 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Claude Code worktrees (created by the EnterWorktree tool)
+.claude/worktrees/
