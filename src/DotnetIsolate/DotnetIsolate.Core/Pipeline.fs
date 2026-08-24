@@ -42,14 +42,43 @@ type IsolateResult =
       /// directory tree were never picked up either. Empty when no solution was found.
       EntriesOutsideDiscoveredSolution: string list }
 
-/// Runs the full pipeline described in DESIGN.md (steps 1-7) end to end: resolves the project
-/// graph and its files, locates the solution (FR-8) and implicit repo-level files, computes the
-/// mirror root, decides the link strategy, materializes the output folder, and - when a solution
-/// was found - generates a scoped copy of it. Returns enough to report what happened; console
-/// output (e.g. which solution was used, per FR-8) is the CLI's job, not this function's.
-let isolate (options: IsolateOptions) : IsolateResult =
-    let projectPaths = options.ProjectPaths |> List.map Path.GetFullPath
+/// `list-files` (FR-17): the resolved dependency set for one or more entry projects, printed
+/// rather than materialized.
+type ListFilesOptions =
+    { ProjectPaths: string list
+      SolutionPath: string option
+      /// List only the files `dotnet restore` needs (see Phase.fs), rather than the full set.
+      RestoreOnly: bool }
 
+type ListFilesResult =
+    { /// Sorted (ordinal), absolute paths - deterministic across runs and platforms so the list is
+      /// safe to diff in CI.
+      Files: string list
+      Projects: string list
+      SolutionRoot: SolutionDiscovery.SolutionRoot option
+      ExcludedArtifacts: string list
+      ForeignProjectFiles: ForeignFiles.ForeignGroup list
+      MissingFiles: string list
+      EntriesOutsideDiscoveredSolution: string list }
+
+/// The output of steps 1-3 (DESIGN.md) plus FR-15/FR-16 filtering: the project graph, each
+/// project's resolved files, implicit repo-level files, and the artifact/foreign-file
+/// classification. Shared by `isolate` and `listFiles`, whose paths diverge only after this point
+/// - one continues into mirror-root computation and materialization, the other stops here.
+type private Resolved =
+    { Projects: string list
+      SolutionRoot: SolutionDiscovery.SolutionRoot option
+      /// Post FR-15 filtering - generated build artifacts already dropped.
+      Files: string list
+      ExcludedArtifacts: string list
+      ForeignProjectFiles: ForeignFiles.ForeignGroup list
+      MissingFiles: string list
+      EntriesOutsideDiscoveredSolution: string list }
+
+/// `projectPaths` must already be `Path.GetFullPath`-normalized by the caller. Raises if
+/// `projectPaths` is empty, or if nothing was resolved at all (both callers surface these as their
+/// own top-level failure, so the message doesn't need to name which verb was running).
+let private resolve (projectPaths: string list) (solutionPathOverride: string option) : Resolved =
     if List.isEmpty projectPaths then
         failwith "at least one project path is required"
 
@@ -91,17 +120,17 @@ let isolate (options: IsolateOptions) : IsolateResult =
     let solutionRoot =
         SolutionDiscovery.resolveSolutionRoot
             SolutionDiscoveryIo.solutionFilesOnDisk
-            options.SolutionPath
+            solutionPathOverride
             projectDir
 
     let ceiling = solutionRoot |> Option.map (fun r -> r.Directory)
 
     // The consequence of the limitation noted above, made visible: an entry outside the
     // discovered solution's directory tree got its files isolated (steps 1-2 don't care where a
-    // solution is), but step 7 below filters the *source* solution's contents, so it can only ever
-    // include projects that were already members of it - and ancestor-globbed ceiling files above
-    // this entry's own tree were never resolved either, since `ceiling` only bounds the discovered
-    // solution's directory.
+    // solution is), but a scoped solution file can only ever include projects that were already
+    // members of the source solution - and ancestor-globbed ceiling files above this entry's own
+    // tree were never resolved either, since `ceiling` only bounds the discovered solution's
+    // directory.
     let entriesOutsideDiscoveredSolution =
         match solutionRoot with
         | Some root -> projectPaths |> List.filter (fun p -> not (MirrorRoot.isUnder root.Directory p))
@@ -127,11 +156,6 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // their bin/obj in through the SDK's default items, and a hand-written `<None Include="**/*"/>`
     // bypasses DefaultItemExcludes entirely - so the filter works on resolved paths and covers
     // both mechanisms alike.
-    //
-    // Placed here, ahead of the output-directory partition and the mirror root, for the same
-    // reason FR-14's missing-file drop is: an artifact must not inflate the mirror root (FR-2),
-    // which any resolved path above the projects does, nor count toward OutputSafety.validate's
-    // "contains every resolved input file" check.
     let declaredOutputDirectories =
         projects
         |> List.collect (fun p -> FileResolution.resolveOutputDirectories (getPropertiesCached p) p)
@@ -150,13 +174,26 @@ let isolate (options: IsolateOptions) : IsolateResult =
             (projects |> List.map Path.GetDirectoryName)
             allFiles
 
-    // Checked here, before the output-directory partition below, so this failure keeps reporting
-    // its own cause (nothing resolved at all) instead of being masked by OutputSafety.validate's
-    // "the output directory contains every resolved input file" - which is only true, and only the
-    // real problem, once there was something to partition in the first place.
     if List.isEmpty allFiles then
         let describedProjectPaths = String.concat ", " projectPaths
         failwith $"no build-relevant files were resolved for {describedProjectPaths}"
+
+    { Projects = projects
+      SolutionRoot = solutionRoot
+      Files = allFiles
+      ExcludedArtifacts = artifactPartition.Excluded
+      ForeignProjectFiles = foreignProjectFiles
+      MissingFiles = resolvedProjectFiles.MissingItemFiles
+      EntriesOutsideDiscoveredSolution = entriesOutsideDiscoveredSolution }
+
+/// Runs the full pipeline described in DESIGN.md (steps 1-7) end to end: resolves the project
+/// graph and its files, locates the solution (FR-8) and implicit repo-level files, computes the
+/// mirror root, decides the link strategy, materializes the output folder, and - when a solution
+/// was found - generates a scoped copy of it. Returns enough to report what happened; console
+/// output (e.g. which solution was used, per FR-8) is the CLI's job, not this function's.
+let isolate (options: IsolateOptions) : IsolateResult =
+    let projectPaths = options.ProjectPaths |> List.map Path.GetFullPath
+    let resolved = resolve projectPaths options.SolutionPath
 
     // FR-6: output defaults to ./<ProjectName>, or an explicit -o/--output-dir path. With more
     // than one entry project there is no single name to default to, so an explicit output
@@ -187,7 +224,7 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // A previous run's output is indistinguishable from source to MSBuild's implicit globs, so
     // drop anything under the output directory before it can inflate the mirror root or get
     // placed inside itself.
-    let partition = OutputSafety.partitionInputs outputDir allFiles
+    let partition = OutputSafety.partitionInputs outputDir resolved.Files
 
     match OutputSafety.validate options.Clean outputDir partition with
     | Error message -> failwith message
@@ -199,7 +236,7 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // the generated solution file in step 7 always lands inside the output folder.
     let mirrorRootInputDirs =
         (allFiles |> List.map Path.GetDirectoryName)
-        @ (solutionRoot |> Option.map (fun r -> [ r.Directory ]) |> Option.defaultValue [])
+        @ (resolved.SolutionRoot |> Option.map (fun r -> [ r.Directory ]) |> Option.defaultValue [])
 
     let mirrorRoot =
         match MirrorRoot.compute mirrorRootInputDirs with
@@ -211,7 +248,7 @@ let isolate (options: IsolateOptions) : IsolateResult =
     // COPY the restore half, run `dotnet restore`, then COPY the full half over it.
     let filesToPlace =
         if options.RestoreOnly then
-            Phase.restoreSubset projects allFiles
+            Phase.restoreSubset resolved.Projects allFiles
         else
             allFiles
 
@@ -233,17 +270,17 @@ let isolate (options: IsolateOptions) : IsolateResult =
     let staleEntries = Materialize.materialize strategy options.Clean mirrorRoot outputDir filesToPlace
 
     // Step 7: generate the scoped solution file, if a source solution was found.
-    match solutionRoot with
+    match resolved.SolutionRoot with
     | Some root when root.SolutionFile.EndsWith(".sln") ->
         let sourceContent = File.ReadAllText(root.SolutionFile)
-        let filtered = SolutionFile.filterSln root.Directory (Set.ofList projects) sourceContent
+        let filtered = SolutionFile.filterSln root.Directory (Set.ofList resolved.Projects) sourceContent
         let relativeSlnPath = Path.GetRelativePath(mirrorRoot, root.SolutionFile)
         let outputSlnPath = Path.Combine(outputDir, relativeSlnPath)
         Directory.CreateDirectory(Path.GetDirectoryName(outputSlnPath)) |> ignore
         SolutionFileIo.write outputSlnPath filtered
     | Some root when root.SolutionFile.EndsWith(".slnx") ->
         let sourceContent = File.ReadAllText(root.SolutionFile)
-        let filtered = SolutionFileXml.filterSlnx root.Directory (Set.ofList projects) sourceContent
+        let filtered = SolutionFileXml.filterSlnx root.Directory (Set.ofList resolved.Projects) sourceContent
         let relativeSlnPath = Path.GetRelativePath(mirrorRoot, root.SolutionFile)
         let outputSlnPath = Path.Combine(outputDir, relativeSlnPath)
         Directory.CreateDirectory(Path.GetDirectoryName(outputSlnPath)) |> ignore
@@ -254,13 +291,45 @@ let isolate (options: IsolateOptions) : IsolateResult =
     | None -> ()
 
     { OutputDir = outputDir
-      IncludedProjects = projects
+      IncludedProjects = resolved.Projects
       FileCount = filesToPlace.Length
-      SolutionRoot = solutionRoot
+      SolutionRoot = resolved.SolutionRoot
       Strategy = strategy
       ExcludedUnderOutput = partition.ExcludedUnderOutput
-      ExcludedArtifacts = artifactPartition.Excluded
-      ForeignProjectFiles = foreignProjectFiles
+      ExcludedArtifacts = resolved.ExcludedArtifacts
+      ForeignProjectFiles = resolved.ForeignProjectFiles
       StaleEntries = staleEntries
-      MissingFiles = resolvedProjectFiles.MissingItemFiles
-      EntriesOutsideDiscoveredSolution = entriesOutsideDiscoveredSolution }
+      MissingFiles = resolved.MissingFiles
+      EntriesOutsideDiscoveredSolution = resolved.EntriesOutsideDiscoveredSolution }
+
+/// FR-17: the same resolved dependency set `isolate` would materialize, printed instead - no
+/// mirror root, no materialization, no solution-file generation. `--restore` narrows it to the
+/// same subset `isolate --restore` writes. Unlike `isolate`, multiple entry projects never require
+/// an explicit output directory, since there is no output directory at all.
+let listFiles (options: ListFilesOptions) : ListFilesResult =
+    let projectPaths = options.ProjectPaths |> List.map Path.GetFullPath
+    let resolved = resolve projectPaths options.SolutionPath
+
+    let files =
+        if options.RestoreOnly then
+            Phase.restoreSubset resolved.Projects resolved.Files
+        else
+            resolved.Files
+
+    // Mirrors isolate's analogous check on filesToPlace: the full set is already known to be
+    // non-empty (resolve's own check above), but the restore narrowing can still empty it out.
+    if List.isEmpty files then
+        let describedProjectPaths = String.concat ", " projectPaths
+
+        failwith
+            $"the --restore phase resolved no files to list for {describedProjectPaths}; nothing would be printed"
+
+    let sortedFiles = files |> List.sortWith (fun a b -> System.String.CompareOrdinal(a, b))
+
+    { Files = sortedFiles
+      Projects = resolved.Projects
+      SolutionRoot = resolved.SolutionRoot
+      ExcludedArtifacts = resolved.ExcludedArtifacts
+      ForeignProjectFiles = resolved.ForeignProjectFiles
+      MissingFiles = resolved.MissingFiles
+      EntriesOutsideDiscoveredSolution = resolved.EntriesOutsideDiscoveredSolution }
