@@ -148,6 +148,16 @@ Numbered so they can be referenced elsewhere (DESIGN.md, tests, PR descriptions)
   never reported: that is the common, legitimate case, and warning about it would train users to
   ignore the note. Reported per owning directory with a count, since one glob sweeps many files.
 
+- **FR-17** — `list-files` prints the same resolved file set `materialize` would place into an
+  output directory — after FR-15 artifact filtering, including FR-16 foreign-project files — as one
+  absolute path per line on stdout, sorted, without writing anything to disk. Intended for a CI step
+  that compares the list against `git diff --name-only` to decide whether a service's dependencies
+  actually changed, and skip an otherwise-identical rebuild when they didn't. `--restore` narrows
+  the list to the FR-11 restore subset. Unlike `materialize`'s FR-13 requirement, multiple entry
+  projects never require an explicit output directory, since there is none to name. Solution-source
+  and FR-14/15/16 diagnostics go to stderr, never stdout, so the file list is safe to consume
+  directly.
+
 ## Performance
 
 - **PR-1** — The analysis phase (determining the full set of files/projects to include) issues

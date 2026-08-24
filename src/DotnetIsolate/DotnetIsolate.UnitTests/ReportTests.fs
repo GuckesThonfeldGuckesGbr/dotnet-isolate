@@ -81,3 +81,63 @@ let ``missing files and files under the output are still reported per file`` () 
     Assert.Equal(2, warnings.Length)
     Assert.Contains(warnings, fun (w: string) -> w.Contains(missing))
     Assert.Contains(warnings, fun (w: string) -> w.Contains(underOutput))
+
+/// A ListFilesResult with nothing to report; tests set only the field they are about.
+let private cleanListFiles: Pipeline.ListFilesResult =
+    { Files = []
+      Projects = []
+      SolutionRoot = None
+      ExcludedArtifacts = []
+      ForeignProjectFiles = []
+      MissingFiles = []
+      EntriesOutsideDiscoveredSolution = [] }
+
+[<Fact>]
+let ``no warnings are produced for a clean list-files run`` () =
+    Assert.Empty(Report.listFilesWarnings cleanListFiles)
+
+[<Fact>]
+let ``list-files warnings summarise excluded artifacts the same way isolate does`` () =
+    let result =
+        { cleanListFiles with
+            ExcludedArtifacts = [ path [ "a" ]; path [ "b" ]; path [ "c" ] ] }
+
+    let line = Report.listFilesWarnings result |> List.exactlyOne
+
+    Assert.Contains("3", line)
+    Assert.Contains("build artifact", line)
+
+[<Fact>]
+let ``list-files warnings report foreign project files the same way isolate does`` () =
+    let other = path [ "repo"; "Other" ]
+    let first = path [ "repo"; "Other"; "a.cs" ]
+
+    let group: ForeignFiles.ForeignGroup = { Directory = other; Files = [ first ] }
+
+    let result = { cleanListFiles with ForeignProjectFiles = [ group ] }
+    let line = Report.listFilesWarnings result |> List.exactlyOne
+
+    Assert.Contains("1 file(s)", line)
+    Assert.Contains(other, line)
+
+[<Fact>]
+let ``list-files warnings report missing files before entries outside the solution, not transposed`` () =
+    let missing = path [ "repo"; "gone.txt" ]
+    let outside = path [ "repo"; "Outside"; "B.fsproj" ]
+
+    let solutionRoot: SolutionDiscovery.SolutionRoot =
+        { Directory = path [ "repo" ]
+          SolutionFile = path [ "repo"; "Fixture.sln" ]
+          Source = SolutionDiscovery.AutoDiscovered }
+
+    let result =
+        { cleanListFiles with
+            MissingFiles = [ missing ]
+            EntriesOutsideDiscoveredSolution = [ outside ]
+            SolutionRoot = Some solutionRoot }
+
+    let warnings = Report.listFilesWarnings result
+
+    Assert.Equal(2, warnings.Length)
+    Assert.Contains(warnings, fun (w: string) -> w.Contains(missing) && w.Contains("does not exist"))
+    Assert.Contains(warnings, fun (w: string) -> w.Contains(outside) && w.Contains("lies outside"))

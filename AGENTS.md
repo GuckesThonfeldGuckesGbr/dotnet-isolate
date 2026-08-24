@@ -13,7 +13,11 @@ whole solution, so unrelated changes elsewhere in the repo don't bust the build 
 
 Usage:
 
-    dotnet isolate path/to/<Project>.csproj [-o/--output-dir <name>] [-s/--solution <path/to/.sln(x)>]
+    dotnet isolate materialize path/to/<Project>.csproj [-o/--output-dir <name>] [-s/--solution <path/to/.sln(x)>]
+    dotnet isolate list-files  path/to/<Project>.csproj [-s/--solution <path/to/.sln(x)>]
+
+`list-files` (FR-17) prints the resolved dependency set instead of copying it, for CI cache-skip
+checks — see README.md's "Skipping a rebuild when nothing changed".
 
 **Status: feature-complete for a v0.1 release, not yet published.** The full pipeline described in
 DESIGN.md (steps 1-7: project graph resolution, per-project file resolution, solution discovery,

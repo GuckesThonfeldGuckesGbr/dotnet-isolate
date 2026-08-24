@@ -6,13 +6,19 @@ the original untouched. The result is a small Docker build context whose layer c
 
 ## Usage
 
-    dotnet isolate path/to/<Project>.csproj [more.csproj ...] [-o <dir>] [-s <path>] [--restore] [--clean]
+    dotnet isolate materialize path/to/<Project>.csproj [more.csproj ...] [-o <dir>] [-s <path>] [--restore] [--clean]
+    dotnet isolate list-files  path/to/<Project>.csproj [more.csproj ...] [-s <path>] [--restore]
 
-- one or more entry projects; the output is the union of their closures
-- `-o`/`--output-dir` — where to write (default `./<ProjectName>`); required for multiple projects
+`materialize` copies the isolated closure into an output folder — this is what earlier versions did
+implicitly. `list-files` prints the same resolved file set instead, one absolute path per line on
+stdout, without writing anything (see "Skipping a rebuild when nothing changed" below).
+
+- one or more entry projects; the result is the union of their closures
+- `-o`/`--output-dir` (materialize only) — where to write (default `./<ProjectName>`); required for
+  multiple projects
 - `-s`/`--solution` — the solution to scope against, overriding the walk-up search
-- `--restore` — emit only the files `dotnet restore` reads, for the split below
-- `--clean` — delete the output directory first, instead of merging into it
+- `--restore` — emit/list only the files `dotnet restore` reads, for the split below
+- `--clean` (materialize only) — delete the output directory first, instead of merging into it
 
 Generated build artifacts are left behind: `bin/` and `obj/` next to a project file, `node_modules/`,
 build logs and coverage reports, and anything under an `ArtifactsPath`. MSBuild resolves them as
@@ -40,9 +46,9 @@ isolated closure and asserts `dotnet restore` is still `CACHED` while the build 
     RUN dotnet tool install -g dotnet-isolate
     ENV PATH="$PATH:/root/.dotnet/tools"
     RUN --mount=type=bind,target=/src,source=. \
-        dotnet isolate /src/Service1/Service1.csproj --restore -o /isolated/restore
+        dotnet isolate materialize /src/Service1/Service1.csproj --restore -o /isolated/restore
     RUN --mount=type=bind,target=/src,source=. \
-        dotnet isolate /src/Service1/Service1.csproj -o /isolated/full
+        dotnet isolate materialize /src/Service1/Service1.csproj -o /isolated/full
 
     FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
     WORKDIR /src
@@ -68,3 +74,32 @@ just your app's runtime image — pick the base it needs, nothing about the cach
 - **Paths are relative to the computed mirror root**, not always the solution root — a file
   referenced from outside the solution folder raises it. Look at the output before writing your
   `COPY` and `publish` paths.
+
+## Skipping a rebuild when nothing changed
+
+`list-files` prints a service's exact dependency set — the same one `materialize` would place into
+an output directory — so a CI step can skip an unchanged service's build/test stage entirely
+instead of relying on coarse path filters (e.g. "did anything under src/Service1/ change", which
+misses a shared library elsewhere in the closure and over-triggers on files the build never reads).
+
+Paths are printed absolute; `git diff --name-only` reports repo-relative paths, so the recipe
+relativizes before comparing:
+
+    repo_root=$(git rev-parse --show-toplevel)
+    deps=$(dotnet isolate list-files src/Service1/Service1.csproj | sed "s|^$repo_root/||" | sort)
+    changed=$(git diff --name-only "$BASE_SHA" HEAD | sort)
+
+    if comm -12 <(printf '%s\n' "$deps") <(printf '%s\n' "$changed") | grep -q .; then
+      echo "dependencies changed — build required"
+    else
+      echo "no dependency changes — skipping build"
+    fi
+
+`BASE_SHA` is whatever your CI provider exposes for "the commit this branch diverged from" — e.g.
+the merge-base with the target branch for a pull request.
+
+Caveat: this only catches changed or added dependencies — a file deleted from the closure won't
+appear in `deps` (list-files reports the *current* dependency set), even though `git diff
+--name-only` still lists it as changed. For full correctness, run `list-files` at both `$BASE_SHA`
+and `HEAD` and union the two dependency lists before comparing; the simpler recipe above is usually
+a fine approximation since dependency removals are rare.

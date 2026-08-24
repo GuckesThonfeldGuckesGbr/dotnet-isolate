@@ -194,3 +194,41 @@ let ``the report summarises artifacts and stale entries and lists the rest per f
         // The bulk categories are one line each, however many entries they carry.
         Assert.Equal(1, warnings |> List.filter (fun w -> w.Contains("build artifact")) |> List.length)
         Assert.Equal(1, warnings |> List.filter (fun w -> w.Contains("was not clean")) |> List.length))
+
+/// listFiles must apply the same FR-15 filtering isolate does: an artifact pulled in by a
+/// hand-written glob is neither printed nor silently missing - it's reported via
+/// ExcludedArtifacts, same as isolate reports it. (Uses the hand-written-glob fixture shape, not
+/// the nested-reference shape above, because F# fixtures have default item globs disabled - only
+/// an explicit glob actually resolves the obj artifact as an MSBuild item in the first place.)
+[<Fact>]
+let ``listFiles excludes an artifact pulled in by a hand-written glob, same as isolate`` () =
+    withTempDir (fun root ->
+        let projectDir = Path.Combine(root, "A")
+        Directory.CreateDirectory(projectDir) |> ignore
+
+        File.WriteAllText(
+            Path.Combine(projectDir, "A.fsproj"),
+            """<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.fs"/>
+    <None Include="**/*.json"/>
+  </ItemGroup>
+</Project>
+"""
+        )
+
+        File.WriteAllText(Path.Combine(projectDir, "Program.fs"), "module A.Program\n")
+        Directory.CreateDirectory(Path.Combine(projectDir, "obj")) |> ignore
+        File.WriteAllText(Path.Combine(projectDir, "obj", "project.assets.json"), "{}")
+
+        let result =
+            Pipeline.listFiles
+                { ProjectPaths = [ Path.Combine(projectDir, "A.fsproj") ]
+                  SolutionPath = None
+                  RestoreOnly = false }
+
+        Assert.DoesNotContain(result.Files, fun (f: string) -> Path.GetFileName(f) = "project.assets.json")
+        Assert.Contains(result.ExcludedArtifacts, fun (f: string) -> Path.GetFileName(f) = "project.assets.json"))

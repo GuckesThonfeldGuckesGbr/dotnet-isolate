@@ -114,3 +114,40 @@ let ``isolate reports nothing when every file belongs to the closure`` () =
                   Clean = false }
 
         Assert.Empty(result.ForeignProjectFiles))
+
+/// listFiles must keep a foreign-owned file in the printed list (it's a real build input) while
+/// still reporting it via ForeignProjectFiles - same as isolate, which keeps it materialized.
+[<Fact>]
+let ``listFiles reports a file owned by a project outside the closure without dropping it`` () =
+    withTempDir (fun root ->
+        let projectDir = Path.Combine(root, "A")
+        Directory.CreateDirectory(projectDir) |> ignore
+
+        File.WriteAllText(
+            Path.Combine(projectDir, "A.fsproj"),
+            """<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.fs"/>
+    <None Include="../Foreign/**/*.json"/>
+  </ItemGroup>
+</Project>
+"""
+        )
+
+        File.WriteAllText(Path.Combine(projectDir, "Program.fs"), "module A.Program\n")
+
+        writeProject (Path.Combine(root, "Foreign")) "Foreign" [] []
+        File.WriteAllText(Path.Combine(root, "Foreign", "swept.json"), "{}")
+
+        let result =
+            Pipeline.listFiles
+                { ProjectPaths = [ Path.Combine(projectDir, "A.fsproj") ]
+                  SolutionPath = None
+                  RestoreOnly = false }
+
+        let group = result.ForeignProjectFiles |> List.exactlyOne
+        Assert.True(MirrorRoot.sameDirectory (Path.Combine(root, "Foreign")) group.Directory)
+        Assert.Contains(result.Files, fun (f: string) -> Path.GetFileName(f) = "swept.json"))

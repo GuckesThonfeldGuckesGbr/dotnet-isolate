@@ -13,7 +13,7 @@ RUN dotnet tool install -g dotnet-isolate --add-source /nupkg --prerelease
 ENV PATH="$PATH:/root/.dotnet/tools"
 COPY . /src
 WORKDIR /src
-RUN dotnet isolate ServiceA/ServiceA.csproj -o /isolated
+RUN dotnet isolate materialize ServiceA/ServiceA.csproj -o /isolated
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 COPY --from=isolate /isolated /src

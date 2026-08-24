@@ -555,3 +555,95 @@ let ``restore and full phases compute the mirror root from the same full file se
         // top level instead of one level down.
         Assert.True(File.Exists(Path.Combine(restoreDir, "A", "A.fsproj")))
         Assert.False(File.Exists(Path.Combine(restoreDir, "A.fsproj"))))
+
+/// list-files must resolve exactly the file set a real isolate run would materialize - same
+/// project graph, same implicit files, same FR-15 artifact filtering - just printed instead of
+/// copied. Reuses the diamond fixture so the two can be compared directly.
+[<Fact>]
+let ``listFiles resolves the same file set isolate would materialize`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [ "B"; "C" ] []
+        writeProject (Path.Combine(root, "B")) "B" [ "D" ] []
+        writeProject (Path.Combine(root, "C")) "C" [ "D" ] []
+        writeProject (Path.Combine(root, "D")) "D" [] [ "appsettings.json" ]
+
+        File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration/>")
+
+        writeSolution
+            (Path.Combine(root, "Fixture.sln"))
+            [ "A", "A/A.fsproj"; "B", "B/B.fsproj"; "C", "C/C.fsproj"; "D", "D/D.fsproj" ]
+
+        let outputDir = Path.Combine(root, "output")
+
+        let isolateResult =
+            Pipeline.isolate
+                { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+                  OutputDir = Some outputDir
+                  SolutionPath = None
+                  RestoreOnly = false
+                  Clean = false }
+
+        let listResult =
+            Pipeline.listFiles
+                { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+                  SolutionPath = None
+                  RestoreOnly = false }
+
+        // Same source files resolved - the materialized tree's file count and the printed list's
+        // length agree.
+        Assert.Equal(isolateResult.FileCount, listResult.Files.Length)
+
+        // Every file the isolate run actually placed appears, absolute, in the printed list -
+        // including the implicit repo-level NuGet.config (FR-10).
+        Assert.Contains(listResult.Files, fun (f: string) -> Path.GetFileName(f) = "A.fsproj")
+        Assert.Contains(listResult.Files, fun (f: string) -> Path.GetFileName(f) = "D.fsproj")
+        Assert.Contains(listResult.Files, fun (f: string) -> Path.GetFileName(f) = "appsettings.json")
+        Assert.Contains(listResult.Files, fun (f: string) -> Path.GetFileName(f) = "NuGet.config")
+
+        // Sorted, ordinally, for deterministic CI diffing.
+        Assert.Equal<string list>(listResult.Files |> List.sortWith (fun a b -> System.String.CompareOrdinal(a, b)), listResult.Files)
+
+        Assert.Equal(isolateResult.IncludedProjects.Length, listResult.Projects.Length)
+        Assert.True(listResult.SolutionRoot.IsSome))
+
+/// --restore must narrow listFiles the same way it narrows isolate's materialized output: project
+/// files and build files, not sources or content.
+[<Fact>]
+let ``listFiles with RestoreOnly narrows to the restore subset`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [ "B" ] [ "appsettings.json" ]
+        writeProject (Path.Combine(root, "B")) "B" [] []
+        File.WriteAllText(Path.Combine(root, "NuGet.config"), "<configuration/>")
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj"; "B", "B/B.fsproj" ]
+
+        let result =
+            Pipeline.listFiles
+                { ProjectPaths = [ Path.Combine(root, "A", "A.fsproj") ]
+                  SolutionPath = None
+                  RestoreOnly = true }
+
+        Assert.Contains(result.Files, fun (f: string) -> Path.GetFileName(f) = "A.fsproj")
+        Assert.Contains(result.Files, fun (f: string) -> Path.GetFileName(f) = "B.fsproj")
+        Assert.Contains(result.Files, fun (f: string) -> Path.GetFileName(f) = "NuGet.config")
+        Assert.DoesNotContain(result.Files, fun (f: string) -> Path.GetFileName(f) = "Program.fs")
+        Assert.DoesNotContain(result.Files, fun (f: string) -> Path.GetFileName(f) = "appsettings.json"))
+
+/// Unlike isolate (FR-13), listFiles never writes an output directory, so there is nothing to
+/// disambiguate a name for - multiple entry projects must not require one.
+[<Fact>]
+let ``listFiles accepts multiple entry projects without requiring an output directory`` () =
+    withTempDir (fun root ->
+        writeProject (Path.Combine(root, "A")) "A" [] []
+        writeProject (Path.Combine(root, "B")) "B" [] []
+        writeSolution (Path.Combine(root, "Fixture.sln")) [ "A", "A/A.fsproj"; "B", "B/B.fsproj" ]
+
+        let result =
+            Pipeline.listFiles
+                { ProjectPaths =
+                    [ Path.Combine(root, "A", "A.fsproj"); Path.Combine(root, "B", "B.fsproj") ]
+                  SolutionPath = None
+                  RestoreOnly = false }
+
+        Assert.Equal(2, result.Projects.Length)
+        Assert.Contains(result.Files, fun (f: string) -> Path.GetFileName(f) = "A.fsproj")
+        Assert.Contains(result.Files, fun (f: string) -> Path.GetFileName(f) = "B.fsproj"))
