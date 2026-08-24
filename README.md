@@ -97,3 +97,9 @@ relativizes before comparing:
 
 `BASE_SHA` is whatever your CI provider exposes for "the commit this branch diverged from" — e.g.
 the merge-base with the target branch for a pull request.
+
+Caveat: this only catches changed or added dependencies — a file deleted from the closure won't
+appear in `deps` (list-files reports the *current* dependency set), even though `git diff
+--name-only` still lists it as changed. For full correctness, run `list-files` at both `$BASE_SHA`
+and `HEAD` and union the two dependency lists before comparing; the simpler recipe above is usually
+a fine approximation since dependency removals are rare.

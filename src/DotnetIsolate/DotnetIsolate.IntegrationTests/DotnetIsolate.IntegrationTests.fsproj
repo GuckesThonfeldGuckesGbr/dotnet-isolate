@@ -24,6 +24,7 @@
         <Compile Include="BuildArtifactsTests.fs"/>
         <Compile Include="BuildArtifactExclusionTests.fs"/>
         <Compile Include="ForeignProjectFileTests.fs"/>
+        <Compile Include="CliTests.fs"/>
         <Compile Include="Program.fs"/>
     </ItemGroup>
 

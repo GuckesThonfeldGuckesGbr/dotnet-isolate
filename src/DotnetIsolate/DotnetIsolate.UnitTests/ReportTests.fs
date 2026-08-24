@@ -119,3 +119,25 @@ let ``list-files warnings report foreign project files the same way isolate does
 
     Assert.Contains("1 file(s)", line)
     Assert.Contains(other, line)
+
+[<Fact>]
+let ``list-files warnings report missing files before entries outside the solution, not transposed`` () =
+    let missing = path [ "repo"; "gone.txt" ]
+    let outside = path [ "repo"; "Outside"; "B.fsproj" ]
+
+    let solutionRoot: SolutionDiscovery.SolutionRoot =
+        { Directory = path [ "repo" ]
+          SolutionFile = path [ "repo"; "Fixture.sln" ]
+          Source = SolutionDiscovery.AutoDiscovered }
+
+    let result =
+        { cleanListFiles with
+            MissingFiles = [ missing ]
+            EntriesOutsideDiscoveredSolution = [ outside ]
+            SolutionRoot = Some solutionRoot }
+
+    let warnings = Report.listFilesWarnings result
+
+    Assert.Equal(2, warnings.Length)
+    Assert.Contains(warnings, fun (w: string) -> w.Contains(missing) && w.Contains("does not exist"))
+    Assert.Contains(warnings, fun (w: string) -> w.Contains(outside) && w.Contains("lies outside"))
