@@ -129,7 +129,7 @@ let ``host-side pattern is cache-hit on rebuild after an unrelated change`` () =
 /// artifact below is never a resolved input at all and the assertions become vacuous.
 /// The bind-mounted isolate step of the TwoPhase Dockerfile, identified by its full command.
 let private isolateStepNeedle =
-    "dotnet isolate /src/ServiceA/ServiceA.csproj -o /isolated/full"
+    "dotnet isolate materialize /src/ServiceA/ServiceA.csproj -o /isolated/full"
 
 /// LF, matching the fixture it is spliced into - the repository is LF everywhere per .gitattributes.
 let private artifactSweepingGlob =

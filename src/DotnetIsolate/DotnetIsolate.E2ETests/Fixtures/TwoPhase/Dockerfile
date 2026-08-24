@@ -9,9 +9,9 @@ COPY nupkg /nupkg
 RUN dotnet tool install -g dotnet-isolate --add-source /nupkg --prerelease
 ENV PATH="$PATH:/root/.dotnet/tools"
 RUN --mount=type=bind,target=/src,source=. \
-    dotnet isolate /src/ServiceA/ServiceA.csproj --restore -o /isolated/restore
+    dotnet isolate materialize /src/ServiceA/ServiceA.csproj --restore -o /isolated/restore
 RUN --mount=type=bind,target=/src,source=. \
-    dotnet isolate /src/ServiceA/ServiceA.csproj -o /isolated/full
+    dotnet isolate materialize /src/ServiceA/ServiceA.csproj -o /isolated/full
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
