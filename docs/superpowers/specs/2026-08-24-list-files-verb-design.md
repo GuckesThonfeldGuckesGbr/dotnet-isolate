@@ -35,9 +35,8 @@ Excluded, same as a real isolate run would drop them:
 for a pipeline with a separate restore-cache-skip check from its full-build one. `-s`/`--solution`
 behaves exactly as it does for `materialize` — the ceiling for ancestor-globbed items.
 
-There is no `-o`/`--output-dir` and no `--clean`: neither applies to a verb that writes nothing.
-They are not merely ignored — they are not valid arguments of this subcommand's parser, so passing
-one is a parse error (see "CLI shape" below), not a silently-dropped flag.
+`-o`/`--output-dir` and `--clean` are rejected: neither applies to a verb that writes nothing (see
+"CLI shape" below for why they're still declared on the parser rather than simply omitted).
 
 ### Output channel discipline
 
@@ -86,6 +85,10 @@ type ListFilesArgs =
     | [<MainCommand; ExactlyOnce>] Project_Paths of paths: string list
     | [<AltCommandLine("-s")>] Solution of path: string
     | Restore
+    // Declared even though list-files never honours them (see below), so Argu recognizes and
+    // consumes the tokens instead of falling through to Project_Paths.
+    | [<AltCommandLine("-o")>] Output_Dir of dir: string
+    | Clean
     interface IArgParserTemplate with member this.Usage = ...
 
 type Arguments =
@@ -94,11 +97,23 @@ type Arguments =
     interface IArgParserTemplate with member this.Usage = ...
 ```
 
-`Program.fs`'s `main` parses the top-level union, dispatches on `results.GetSubCommand()`, and each
-branch builds the corresponding `Pipeline` options record and prints accordingly. `ListFilesArgs`
-has no `Output_Dir`/`Clean` cases at all, so `dotnet isolate list-files foo.csproj -o bar` fails
-Argu's own parse with an "unrecognized argument" error — the flag-conflict question is answered by
-the type, not by a runtime check in `main`.
+**Why `Output_Dir`/`Clean` are declared on `ListFilesArgs` at all, instead of simply omitted:**
+verified directly against the installed Argu 6.2.5 that `[<MainCommand>] Project_Paths of string
+list` does not reject unknown flags — it silently folds them into the path list. (This is
+pre-existing behavior of the *current*, single-type `Arguments`, not something the subcommand split
+introduces: `dotnet isolate foo.csproj --bogus-flag` today parses to
+`Project_Paths ["foo.csproj"; "--bogus-flag"]` with no error, confirmed with a throwaway probe
+project against the real package.) Omitting the cases entirely, as originally spec'd, would mean
+`dotnet isolate list-files foo.csproj -o bar` silently treats `"-o"` and `"bar"` as two more
+(bogus, nonexistent) project paths and fails later with a confusing MSBuild "project not found"
+error instead of a clear CLI message — worse than either flat-out accepting or rejecting the flag.
+
+So the flag-conflict question is *not* answered by the type alone. `Program.fs`'s `main` parses the
+top-level union, dispatches on `results.GetSubCommand()`, and the `List_Files` branch explicitly
+checks `sub.Contains(Output_Dir) || sub.Contains(Clean)` and fails with a clear message
+("`-o`/`--clean` are not valid with list-files; it never writes an output directory") before
+building `ListFilesOptions` — a small, scoped runtime check on exactly the two flags that don't
+apply, not a general validation pass.
 
 ## Pipeline refactor
 
